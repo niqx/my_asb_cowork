@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     )
 
 
+    # Feature toggles
+    health_enabled: bool = Field(
+        default=False,
+        description="Enable Oura Ring health module (requires OURA_ACCESS_TOKEN)",
+    )
+
     # Location (updated dynamically by /location command)
     location_city: str = Field(default="Москва", description="Current city name")
     location_lat: float = Field(default=55.75, description="Current latitude")

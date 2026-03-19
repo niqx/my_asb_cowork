@@ -69,11 +69,16 @@ def get_help_inline_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_settings_keyboard(night_notifications: bool = True) -> InlineKeyboardMarkup:
+def get_settings_keyboard(
+    night_notifications: bool = True,
+    health_enabled: bool = False,
+) -> InlineKeyboardMarkup:
     """Inline keyboard for Settings menu."""
     builder = InlineKeyboardBuilder()
     toggle_label = "🔔 Ночные уведомления: ВКЛ" if night_notifications else "🔕 Ночные уведомления: ВЫКЛ"
     builder.button(text=toggle_label, callback_data="settings:toggle_night")
+    health_label = "🫀 Здоровье (Oura): ВКЛ" if health_enabled else "🫀 Здоровье (Oura): ВЫКЛ"
+    builder.button(text=health_label, callback_data="settings:toggle_health")
     builder.button(text="🏙️ Сменить город", callback_data="settings:change_city")
     builder.adjust(1)
     return builder.as_markup()

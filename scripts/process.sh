@@ -129,7 +129,7 @@ if grep -q '"error"' "$CAPTURE_FILE"; then
 USE ONLY: dbrain-processor skill. Output template: Обработка за {DATE}
 DO NOT use morning-briefer skill. DO NOT generate morning briefing.
 
-TASK: Process todays voice/text entries. Also call Oura MCP (get_stress, get_daily_sleep, get_readiness) to include health context in the report — correlate stress peaks with events from daily notes -> classify -> create Todoist tasks -> save thoughts -> generate evening HTML report.
+TASK: Process todays voice/text entries -> classify -> create Todoist tasks -> save thoughts -> generate evening HTML report.$([ "${HEALTH_ENABLED:-false}" = "true" ] && echo " Also call Oura MCP (get_stress, get_daily_sleep, get_readiness) to include health context in the report — correlate stress peaks with events from daily notes.")
 
 $MCP_PROMPT" \
         2>&1) || true

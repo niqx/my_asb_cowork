@@ -5,6 +5,12 @@ source "$(dirname "$0")/common.sh"
 init
 init_mcp
 
+# ── Toggle check ──
+if [ "${HEALTH_ENABLED:-false}" != "true" ]; then
+    echo "Health module disabled (HEALTH_ENABLED!=true) — exiting"
+    exit 0
+fi
+
 WEEKDAY=$(LC_TIME=ru_RU.UTF-8 date +%A 2>/dev/null || date +%A)
 
 echo "=== Health check for $TODAY ==="
