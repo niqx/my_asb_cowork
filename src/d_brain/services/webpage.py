@@ -28,6 +28,21 @@ _SUMMARIZE_PROMPT = (
     "Пиши кратко (3–7 пунктов), без воды. Формат: маркированный список на русском языке."
 )
 
+_YT_SUMMARIZE_PROMPT = (
+    "Обработай транскрипт YouTube видео для персонального второго мозга.\n"
+    "Пользователь: [your name and professional context].\n\n"
+    "Ответ СТРОГО в двух блоках, разделённых строкой ===TELEGRAM===\n\n"
+    "БЛОК 1 — vault (markdown, с заголовками ## ключевых разделов):\n"
+    "Структурированный переосмысленный обзор: суть, ключевые идеи, выводы. "
+    "Раздел ## Комментарии аудитории — только если есть реальная ценность "
+    "(опыт, идеи, нетривиальная критика); иначе раздел пропустить полностью.\n\n"
+    "===TELEGRAM===\n\n"
+    "БЛОК 2 — Telegram (plain text, НИКАКИХ *, **, #, ---, markdown-символов)!\n"
+    "Суть через точки-буллеты (• пункты, 5-8 штук).\n"
+    "Абзац 'Из зала:' — только если есть 1-2 реально ценных комментария; иначе не писать.\n"
+    "Абзац 'Применимо:' — 2 предложения что конкретно применимо Даниле в его работе."
+)
+
 
 def extract_urls(text: str) -> list[str]:
     """Extract all http(s) URLs from text."""
@@ -181,14 +196,24 @@ def _run_claude_cli(prompt: str, timeout: int = 60) -> str:
 
 
 async def summarize_content(
-    title: str, text: str, comments: list[str], api_key: str = ""
+    title: str, text: str, comments: list[str], api_key: str = "", mode: str = "article"
 ) -> str:
-    """Summarize article text and top comments via claude CLI (haiku).
+    """Summarize content via claude CLI (haiku).
 
+    mode='article': generic article summary (bullet list).
+    mode='youtube': vault markdown + ===TELEGRAM=== + telegram plain text.
     api_key is ignored — uses claude subscription via CLI.
     """
     if not text:
         return ""
+
+    if mode == "youtube":
+        parts = [f"Video: {title}" if title else "YouTube", text[:30_000]]
+        if comments:
+            parts.append("Комментарии:\n" + "\n".join(f"- {c}" for c in comments[:15]))
+        yt_content = "\n\n".join(p for p in parts if p)
+        prompt = f"{_YT_SUMMARIZE_PROMPT}\n\n---\n\n{yt_content}"
+        return await asyncio.to_thread(_run_claude_cli, prompt, 90)
 
     parts = [f"# {title}" if title else "", text[:30_000]]
     if comments:
@@ -197,7 +222,6 @@ async def summarize_content(
 
     prompt = f"{_SUMMARIZE_PROMPT}\n\n{content}"
     return await asyncio.to_thread(_run_claude_cli, prompt, 60)
-
 
 async def synthesize_articles(articles: list[dict], api_key: str = "") -> str:
     """Unified synthesis of multiple articles via claude CLI (haiku).

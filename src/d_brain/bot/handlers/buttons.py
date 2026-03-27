@@ -7,22 +7,6 @@ from aiogram.types import Message
 router = Router(name="buttons")
 
 
-@router.message(F.text == "📊 Статус")
-async def btn_status(message: Message) -> None:
-    """Handle Status button."""
-    from d_brain.bot.handlers.commands import cmd_status
-
-    await cmd_status(message)
-
-
-@router.message(F.text == "⚙️ Обработать")
-async def btn_process(message: Message) -> None:
-    """Handle Process button."""
-    from d_brain.bot.handlers.process import cmd_process
-
-    await cmd_process(message)
-
-
 @router.message(F.text == "📅 Неделя")
 async def btn_weekly(message: Message) -> None:
     """Handle Weekly button."""
@@ -61,3 +45,11 @@ async def btn_settings(message: Message) -> None:
     from d_brain.bot.handlers.commands import cmd_settings
 
     await cmd_settings(message)
+
+
+@router.message(F.text == "🔧 Улучшить")
+async def btn_improve(message: Message) -> None:
+    """Handle Improve button - shortcut to /improve."""
+    from d_brain.bot.handlers.improve import cmd_improve
+
+    await cmd_improve(message)

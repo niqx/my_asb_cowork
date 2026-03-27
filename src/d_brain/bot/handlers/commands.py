@@ -44,6 +44,13 @@ def _write_env_flag(key: str, value: str) -> None:
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
     """Handle /start command."""
+    settings = get_settings()
+    # Record first seen date for onboarding help button visibility
+    if settings.first_seen is None:
+        today_str = date.today().isoformat()
+        object.__setattr__(settings, "first_seen", today_str)
+        _write_env_flag("FIRST_SEEN", today_str)
+
     await message.answer(
         "<b>d-brain</b> - твой голосовой дневник\n\n"
         "Отправляй мне:\n"
@@ -60,7 +67,7 @@ async def cmd_start(message: Message) -> None:
         "/done - завершить рефлексию недели\n"
         "/fix - добавить исправление транскрипции\n"
         "/help - справка",
-        reply_markup=get_main_keyboard(),
+        reply_markup=get_main_keyboard(settings),
     )
     await message.answer(
         "Быстрые действия:",
@@ -166,7 +173,7 @@ async def cmd_settings(message: Message) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
         ),
     )
 
@@ -214,7 +221,7 @@ async def cb_settings(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
         ),
     )
 
@@ -233,7 +240,7 @@ async def cb_toggle_night(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
         ),
     )
 
@@ -250,7 +257,7 @@ async def cb_toggle_health(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, new_value, settings.obsidian_sync_enabled
+            _night_notifications_enabled, new_value, settings.obsidian_sync_enabled, settings.improve_mode
         ),
     )
 
@@ -268,9 +275,34 @@ async def cb_toggle_obsidian_sync(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, new_value
+            _night_notifications_enabled, settings.health_enabled, new_value, settings.improve_mode
         ),
     )
+
+
+@router.callback_query(F.data == "settings:toggle_improve")
+async def cb_toggle_improve(callback: CallbackQuery) -> None:
+    """Toggle improve mode (shows/hides Улучшить button in main keyboard)."""
+    settings = get_settings()
+    new_value = not settings.improve_mode
+    object.__setattr__(settings, "improve_mode", new_value)
+    _write_env_flag("IMPROVE_MODE", str(new_value).lower())
+    status = "включён" if new_value else "выключен"
+    await callback.answer(f"Режим улучшений {status}")
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        f"<b>Настройки</b>\n\n"
+        f"🏙️ Город: <b>{settings.location_city}</b>\n",
+        reply_markup=get_settings_keyboard(
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, new_value
+        ),
+    )
+
+
+@router.callback_query(F.data == "settings:help")
+async def cb_settings_help(callback: CallbackQuery) -> None:
+    """Show help from settings menu."""
+    await callback.answer()
+    await cmd_help(callback.message)  # type: ignore[arg-type]
 
 
 @router.callback_query(F.data == "settings:change_city")
@@ -297,6 +329,6 @@ async def handle_city_input(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Город обновлён: <b>{city}</b>",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
         ),
     )

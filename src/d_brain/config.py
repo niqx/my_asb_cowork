@@ -3,6 +3,7 @@
 from functools import lru_cache
 
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,16 @@ class Settings(BaseSettings):
     obsidian_sync_enabled: bool = Field(
         default=True,
         description="Push to git after each saved message (Obsidian real-time sync)",
+    )
+
+    improve_mode: bool = Field(
+        default=False,
+        description="Show 'Улучшить' shortcut button in main keyboard",
+    )
+
+    first_seen: Optional[str] = Field(
+        default=None,
+        description="Date when user first used the bot (YYYY-MM-DD), for onboarding help button",
     )
 
     # Location (updated dynamically by /location command)

@@ -124,7 +124,7 @@ async def handle_text(message: Message) -> None:
 
 async def _handle_youtube(message: Message, video_id: str, settings) -> None:  # type: ignore[type-arg]
     """Process YouTube URL: subtitles/transcription + top comments + summary."""
-    wait_msg = await message.answer("⏳ Обрабатываю видео…")
+    wait_msg = await message.answer("👀 Вижу видео, смотрю…")
 
     try:
         transcriber = DeepgramTranscriber(settings.deepgram_api_key)
@@ -137,14 +137,13 @@ async def _handle_youtube(message: Message, video_id: str, settings) -> None:  #
         source = result["transcript_source"]
         comments = result["comments"]
 
-        # Source label
         source_label = {
             "subtitles_ru": "субтитры RU",
             "subtitles_en": "субтитры EN",
             "deepgram": "Deepgram",
         }.get(source, source)
 
-        # Header
+        # Telegram header (plain text)
         header_parts = [f"▶️ {title}"] if title else ["▶️ YouTube"]
         meta_parts = []
         if channel:
@@ -156,17 +155,31 @@ async def _handle_youtube(message: Message, video_id: str, settings) -> None:  #
             header_parts.append(" · ".join(meta_parts))
         header = "\n".join(header_parts)
 
-        # Comments block
-        comments_block = ""
-        if comments:
-            top = comments[:12]
-            lines = [f"• {c}" for c in top]
-            comments_block = "\n\n━━━━━━━━━━\n💬 Топ комментарии:\n" + "\n".join(lines)
+        # Vault header (markdown)
+        vault_meta = []
+        if channel:
+            vault_meta.append(f"**Канал:** {channel}")
+        if duration:
+            vault_meta.append(f"**Длительность:** {duration}")
+        vault_meta.append(f"**Источник:** {source_label}")
+        header_md_line2 = " | ".join(vault_meta)
+        header_md = f"# {title}\n{header_md_line2}" if title else f"# YouTube\n{header_md_line2}"
 
-        # Full vault entry
-        vault_text = header + "\n\n" + transcript + comments_block
+        # Summarize via Claude (youtube mode: vault_md + ===TELEGRAM=== + telegram_text)
+        yt_content = f"Канал: {channel} | Длительность: {duration} | Источник: {source_label}\n\n{transcript}"
+        raw_summary = await summarize_content(title, yt_content, comments, "", mode="youtube")
 
-        # Save to vault
+        # Parse two blocks
+        if "===TELEGRAM===" in raw_summary:
+            vault_md, telegram_text = raw_summary.split("===TELEGRAM===", 1)
+            vault_md = vault_md.strip()
+            telegram_text = telegram_text.strip()
+        else:
+            vault_md = raw_summary.strip()
+            telegram_text = raw_summary.strip()
+
+        # Save to vault: structured markdown overview
+        vault_text = header_md + "\n\n" + vault_md
         storage = VaultStorage(settings.vault_path)
         timestamp = datetime.fromtimestamp(message.date.timestamp())
         storage.append_to_daily(vault_text, timestamp, "[youtube]")
@@ -186,18 +199,22 @@ async def _handle_youtube(message: Message, video_id: str, settings) -> None:  #
             reflection.append_entry(week, vault_text, source="youtube")
             extra = " (+ рефлексия недели)"
 
-        # Summarize transcript via claude CLI (haiku)
-        summary = await summarize_content(title, transcript, comments, "")
+        # Daily file path (relative to vault)
+        date_str = timestamp.strftime("%Y-%m-%d")
+        daily_path = f"daily/{date_str}.md"
 
-        # Delete wait message and send result
-        await wait_msg.delete()
-        await _send_chunked(message, header + "\n\n" + transcript)
-        if comments_block:
-            await _send_chunked(message, comments_block.strip())
-        if summary:
-            await message.answer(f"💡 Ключевое:\n{summary}\n\n✓ Записал{extra}")
-        else:
-            await message.answer(f"✓ Записал{extra}")
+        # Build final Telegram message and edit the initial status message
+        tg_parts = [header]
+        if telegram_text:
+            tg_parts.append(telegram_text)
+        tg_parts.append(f"📁 {daily_path}")
+        tg_parts.append(f"✓ Записал{extra}")
+        final_msg = "\n\n".join(tg_parts)
+
+        try:
+            await wait_msg.edit_text(final_msg)
+        except Exception:
+            await wait_msg.edit_text(final_msg, parse_mode=None)
 
         logger.info(
             "YouTube saved: %s, transcript=%d chars, comments=%d",
@@ -210,8 +227,10 @@ async def _handle_youtube(message: Message, video_id: str, settings) -> None:  #
 
     except Exception as exc:
         logger.exception("YouTube processing error")
-        await wait_msg.delete()
-        await message.answer(f"❌ Не удалось обработать видео: {exc}")
+        try:
+            await wait_msg.edit_text(f"❌ Не удалось обработать видео: {exc}")
+        except Exception:
+            await message.answer(f"❌ Не удалось обрабовать видео: {exc}")
         await asyncio.to_thread(_log_error_to_notes, settings.vault_path, "YouTube", exc)
 
 

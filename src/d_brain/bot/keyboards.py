@@ -1,23 +1,45 @@
 """Reply keyboards for Telegram bot."""
 
+from __future__ import annotations
+
+from datetime import date
+from typing import TYPE_CHECKING
+
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
+if TYPE_CHECKING:
+    from d_brain.config import Settings
 
-def get_main_keyboard() -> ReplyKeyboardMarkup:
-    """Main reply keyboard with common commands."""
+
+def get_main_keyboard(settings: Settings | None = None) -> ReplyKeyboardMarkup:
+    """Main reply keyboard. Dynamic based on settings (help onboarding, improve mode)."""
+    from d_brain.config import get_settings as _get_settings
+    if settings is None:
+        settings = _get_settings()
+
     builder = ReplyKeyboardBuilder()
-    # First row: main commands
-    builder.button(text="📊 Статус")
-    builder.button(text="⚙️ Обработать")
-    builder.button(text="📅 Неделя")
-    # Second row: additional
+    # Row 1: fixed buttons
     builder.button(text="✨ Запрос")
-    builder.button(text="✏️ Правки")
-    builder.button(text="❓ Помощь")
-    # Third row: settings
+    builder.button(text="📅 Неделя")
     builder.button(text="⚙️ Настройки")
-    builder.adjust(3, 3, 1)
+
+    # Row 2: Правки + optional onboarding/improve buttons
+    row2 = ["✏️ Правки"]
+    if settings.first_seen:
+        try:
+            days_since = (date.today() - date.fromisoformat(settings.first_seen)).days
+            if days_since < 30:
+                row2.append("❓ Помощь")
+        except ValueError:
+            pass
+    if settings.improve_mode:
+        row2.append("🔧 Улучшить")
+
+    for text in row2:
+        builder.button(text=text)
+
+    builder.adjust(3, len(row2))
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
@@ -51,28 +73,27 @@ def get_edit_confirm_keyboard() -> ReplyKeyboardMarkup:
 def get_start_inline_keyboard() -> InlineKeyboardMarkup:
     """Inline keyboard for /start message with quick-access commands."""
     builder = InlineKeyboardBuilder()
-    builder.button(text="⚙️ Обработать", callback_data="cmd:process")
     builder.button(text="✨ Запрос", callback_data="cmd:do")
     builder.button(text="📅 Неделя", callback_data="cmd:weekly")
     builder.button(text="⚙️ Настройки", callback_data="cmd:settings")
-    builder.adjust(3, 1)
+    builder.adjust(3)
     return builder.as_markup()
 
 
 def get_help_inline_keyboard() -> InlineKeyboardMarkup:
     """Inline keyboard for /help message with quick-access commands."""
     builder = InlineKeyboardBuilder()
-    builder.button(text="⚙️ Обработать", callback_data="cmd:process")
     builder.button(text="✨ Запрос", callback_data="cmd:do")
     builder.button(text="📅 Неделя", callback_data="cmd:weekly")
-    builder.adjust(3)
+    builder.adjust(2)
     return builder.as_markup()
 
 
 def get_settings_keyboard(
     night_notifications: bool = True,
     health_enabled: bool = False,
-    obsidian_sync_enabled: bool = True,
+    obsidian_sync_enabled: bool = False,
+    improve_mode: bool = False,
 ) -> InlineKeyboardMarkup:
     """Inline keyboard for Settings menu."""
     builder = InlineKeyboardBuilder()
@@ -82,6 +103,9 @@ def get_settings_keyboard(
     builder.button(text=health_label, callback_data="settings:toggle_health")
     sync_label = "📡 Obsidian Sync: ВКЛ" if obsidian_sync_enabled else "📡 Obsidian Sync: ВЫКЛ"
     builder.button(text=sync_label, callback_data="settings:toggle_obsidian_sync")
+    improve_label = "🔧 Улучшения: ВКЛ" if improve_mode else "🔧 Улучшения: ВЫКЛ"
+    builder.button(text=improve_label, callback_data="settings:toggle_improve")
     builder.button(text="🏙️ Сменить город", callback_data="settings:change_city")
+    builder.button(text="❓ Помощь", callback_data="settings:help")
     builder.adjust(1)
     return builder.as_markup()
