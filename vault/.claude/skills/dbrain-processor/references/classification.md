@@ -27,7 +27,7 @@ Based on user's work context (see [ABOUT.md](ABOUT.md)):
 Брифы, стратегии, креатив, кампании, KPI, предложения
 
 <!-- Добавьте имена ваших клиентов через запятую -->
-**Keywords:** [Your Client Names], клиент, бриф, презентация, дедлайн, KPI
+**Keywords:** Макс, Вова, Бизнес, клиент, бриф, презентация, дедлайн, KPI
 
 **→ Category:** task (p1-p2) → Todoist
 
@@ -48,16 +48,14 @@ Based on user's work context (see [ABOUT.md](ABOUT.md)):
 ### Company Ops
 Команда, процессы, автоматизация, найм, управление, финансы
 
-<!-- Замените [Your Company] на название вашей компании/проекта -->
-**Keywords:** команда, найм, процесс, HR, финансы, [Your Company]
+**Keywords:** команда, найм, процесс, HR, финансы, Т-Путешествия
 
 **→ Category:** task или project (depends on urgency)
 
 ### Content
 Посты, идеи, тезисы для Telegram и LinkedIn
 
-<!-- Замените [@your_channel] на ваш Telegram-канал или удалите если не нужно -->
-**Keywords:** пост, [@your_channel], LinkedIn, контент, тезис, статья
+**Keywords:** пост, LinkedIn, контент, тезис, статья
 
 **→ Category:** idea → thoughts/ideas/ или task если с дедлайном
 
@@ -163,8 +161,7 @@ tags: [tag1, tag2]
 [Ключевая идея]
 
 ## Implication
-<!-- Замените [Your Company] на название вашей компании -->
-[Что это значит для [Your Company]/продукта/стратегии]
+[Что это значит для Т-Путешествий/продукта/стратегии]
 
 ## Next Action
 [Конкретный шаг — не абстрактный]
