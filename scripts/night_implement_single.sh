@@ -43,7 +43,9 @@ cd "$PROJECT_DIR"
 
 RESULT=$(claude --print --dangerously-skip-permissions \
     --model claude-sonnet-4-6 \
-    -p "Implement this improvement to the d-brain Telegram bot project.
+    -p "Отвечай исключительно на русском языке.
+
+Implement this improvement to the d-brain Telegram bot project.
 
 Concept document: $FULL_CONCEPT_PATH
 

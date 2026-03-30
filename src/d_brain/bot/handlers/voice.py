@@ -7,6 +7,7 @@ from aiogram import Bot, Router
 from aiogram.types import Message
 
 from d_brain.config import get_settings
+from d_brain.services.git import VaultGit
 from d_brain.services.corrections import CorrectionsService
 from d_brain.services.reflection import ReflectionService
 from d_brain.services.session import SessionStore
@@ -132,6 +133,11 @@ async def handle_voice(message: Message, bot: Bot) -> None:
             await send_chunked(message, f"🎤 {corrected}")
 
         await message.answer(footer)
+        if settings.obsidian_sync_enabled:
+            import asyncio
+            asyncio.create_task(asyncio.to_thread(
+                VaultGit(settings.vault_path).commit_and_push, "sync: voice"
+            ))
         logger.info("Voice message saved: %d chars%s", len(corrected), extra)
 
     except Exception as e:

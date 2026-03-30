@@ -24,8 +24,11 @@ def get_main_keyboard(settings: Settings | None = None) -> ReplyKeyboardMarkup:
     builder.button(text="📅 Неделя")
     builder.button(text="⚙️ Настройки")
 
-    # Row 2: Еда + Правки + optional onboarding/improve buttons
-    row2 = ["🍽 Еда", "✏️ Правки"]
+    # Row 2: Еда (if nutrition enabled) + Правки + optional onboarding/improve buttons
+    row2 = []
+    if settings.nutrition_enabled:
+        row2.append("🍽 Еда")
+    row2.append("✏️ Правки")
     if settings.first_seen:
         try:
             days_since = (date.today() - date.fromisoformat(settings.first_seen)).days
@@ -103,6 +106,7 @@ def get_settings_keyboard(
     health_enabled: bool = False,
     obsidian_sync_enabled: bool = False,
     improve_mode: bool = False,
+    nutrition_enabled: bool = True,
 ) -> InlineKeyboardMarkup:
     """Inline keyboard for Settings menu."""
     builder = InlineKeyboardBuilder()
@@ -110,6 +114,8 @@ def get_settings_keyboard(
     builder.button(text=toggle_label, callback_data="settings:toggle_night")
     health_label = "🫀 Здоровье (Oura): ВКЛ" if health_enabled else "🫀 Здоровье (Oura): ВЫКЛ"
     builder.button(text=health_label, callback_data="settings:toggle_health")
+    nutrition_label = "🍽 Нутрициолог: ВКЛ" if nutrition_enabled else "🍽 Нутрициолог: ВЫКЛ"
+    builder.button(text=nutrition_label, callback_data="settings:toggle_nutrition")
     sync_label = "📡 Obsidian Sync: ВКЛ" if obsidian_sync_enabled else "📡 Obsidian Sync: ВЫКЛ"
     builder.button(text=sync_label, callback_data="settings:toggle_obsidian_sync")
     improve_label = "🔧 Улучшения: ВКЛ" if improve_mode else "🔧 Улучшения: ВЫКЛ"

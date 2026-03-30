@@ -173,7 +173,7 @@ async def cmd_settings(message: Message) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode, settings.nutrition_enabled
         ),
     )
 
@@ -221,7 +221,7 @@ async def cb_settings(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode, settings.nutrition_enabled
         ),
     )
 
@@ -240,7 +240,7 @@ async def cb_toggle_night(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode, settings.nutrition_enabled
         ),
     )
 
@@ -257,7 +257,7 @@ async def cb_toggle_health(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, new_value, settings.obsidian_sync_enabled, settings.improve_mode
+            _night_notifications_enabled, new_value, settings.obsidian_sync_enabled, settings.improve_mode, settings.nutrition_enabled
         ),
     )
 
@@ -275,7 +275,7 @@ async def cb_toggle_obsidian_sync(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, new_value, settings.improve_mode
+            _night_notifications_enabled, settings.health_enabled, new_value, settings.improve_mode, settings.nutrition_enabled
         ),
     )
 
@@ -293,7 +293,25 @@ async def cb_toggle_improve(callback: CallbackQuery) -> None:
         f"<b>Настройки</b>\n\n"
         f"🏙️ Город: <b>{settings.location_city}</b>\n",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, new_value
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, new_value, settings.nutrition_enabled
+        ),
+    )
+
+
+@router.callback_query(F.data == "settings:toggle_nutrition")
+async def cb_toggle_nutrition(callback: CallbackQuery) -> None:
+    """Toggle nutrition tracking (hides/shows 🍽 Еда button and КБЖУ features)."""
+    settings = get_settings()
+    new_value = not settings.nutrition_enabled
+    object.__setattr__(settings, "nutrition_enabled", new_value)
+    _write_env_flag("NUTRITION_ENABLED", str(new_value).lower())
+    status = "включён" if new_value else "выключен"
+    await callback.answer(f"Нутрициолог {status}")
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        f"<b>Настройки</b>\n\n"
+        f"🏙️ Город: <b>{settings.location_city}</b>\n",
+        reply_markup=get_settings_keyboard(
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode, new_value
         ),
     )
 
@@ -329,6 +347,6 @@ async def handle_city_input(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Город обновлён: <b>{city}</b>",
         reply_markup=get_settings_keyboard(
-            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode
+            _night_notifications_enabled, settings.health_enabled, settings.obsidian_sync_enabled, settings.improve_mode, settings.nutrition_enabled
         ),
     )

@@ -25,6 +25,9 @@ from aiogram.types import Message
 from d_brain.bot.keyboards import get_food_keyboard, get_main_keyboard
 from d_brain.bot.states import FoodState
 from d_brain.config import get_settings
+from d_brain.services.git import VaultGit
+from d_brain.services.session import SessionStore
+from d_brain.services.storage import VaultStorage
 from d_brain.services.transcription import DeepgramTranscriber
 
 router = Router(name="food")
@@ -46,6 +49,10 @@ _MEAL_TYPE_EMOJI = {
 async def enter_food_mode(message: Message, state: FSMContext) -> None:
     """Start a food logging session."""
     if not message.from_user:
+        return
+    settings = get_settings()
+    if not settings.nutrition_enabled:
+        await message.answer("🍽 Нутрициолог отключён. Включи в /settings.")
         return
     await state.set_state(FoodState.collecting)
     await state.update_data(file_ids=[], texts=[], msg_count=0)
@@ -256,6 +263,9 @@ async def _process_food_session(
 
     await state.clear()
 
+    # ── Write to vault daily note so main agent sees food context ──
+    _write_meal_to_vault(settings, analysis, user_id)
+
     # Build result message
     emoji = _MEAL_TYPE_EMOJI.get(analysis.meal_type, "🍽")
     report = _format_analysis(emoji, analysis, progress)
@@ -267,6 +277,30 @@ async def _process_food_session(
         parse_mode="HTML",
     )
     await bot.send_message(chat_id, "✅ Записано в базу.", reply_markup=get_main_keyboard())
+
+
+def _write_meal_to_vault(settings: "Settings", analysis: "MealAnalysis", user_id: int) -> None:  # type: ignore[name-defined]
+    """Write a one-line food entry to vault daily note for main agent context."""
+    try:
+        storage = VaultStorage(settings.vault_path)
+        entry = (
+            f"🍽 {analysis.meal_type.capitalize()}: {analysis.description} "
+            f"— {analysis.calories} ккал "
+            f"(Б:{analysis.protein}г Ж:{analysis.fat}г У:{analysis.carbs}г)\n"
+            f"  💬 {analysis.comment}\n"
+            f"  💡 {analysis.recommendation}"
+        )
+        storage.append_to_daily(entry, datetime.now(), "[food]")
+
+        session = SessionStore(settings.vault_path)
+        session.append(user_id, "food", text=entry)
+
+        if settings.obsidian_sync_enabled:
+            asyncio.create_task(asyncio.to_thread(
+                VaultGit(settings.vault_path).commit_and_push, "sync: food"
+            ))
+    except Exception:
+        logger.exception("Failed to write meal to vault")
 
 
 def _format_analysis(emoji: str, a: "MealAnalysis", progress: dict) -> str:  # type: ignore[name-defined]

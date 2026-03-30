@@ -46,7 +46,7 @@ class VaultGit:
             return False
 
         # Stage all changes
-        add_result = self._run_git("add", "-A")
+        add_result = self._run_git("add", ".")
         if add_result.returncode != 0:
             logger.error("Git add failed: %s", add_result.stderr)
             return False

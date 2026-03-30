@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     nutrition_daily_protein: float = Field(default=150.0, description="Daily protein target (g)")
     nutrition_daily_fat: float = Field(default=55.0, description="Daily fat target (g)")
     nutrition_daily_carbs: float = Field(default=220.0, description="Daily carbs target (g)")
+    nutrition_enabled: bool = Field(
+        default=True,
+        description="Enable nutrition tracking (🍽 Еда button, КБЖУ analysis, Supabase logging)",
+    )
 
     @property
     def daily_path(self) -> Path:

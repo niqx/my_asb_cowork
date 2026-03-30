@@ -156,6 +156,57 @@ mcp-cli may take 10-30 sec on first call (server startup). Retry 3x on error." \
     echo "Execute saved: $(wc -c < "$EXECUTE_FILE") bytes"
 
     # ── Phase 3: REFLECT ──
+    # -- Pre-REFLECT: Fetch Oura full-day health context --
+    OURA_CONTEXT=""
+    if [ "${HEALTH_ENABLED:-false}" = "true" ]; then
+        echo "=== Fetching Oura health context ==="
+        OURA_PROMPT="Today is $TODAY. Call ALL of the following Oura MCP tools and return a compact plain text summary in Russian (no HTML, no markdown):
+1. get_daily_sleep — ночной сон: score, duration, efficiency, deep/REM/light breakdown
+2. get_readiness — readiness score + key contributors (HRV balance, recovery index, body temperature)
+3. get_stress — stress level timeline over the day, peak stress moments
+4. get_heart_rate — resting HR, any notable spikes or drops
+5. get_daily_activity — шаги, active calories, distance, movement goal progress
+Format: one line per metric category, values in brackets. Example: Сон: [score=78] 7ч 20мин, эффективность 88%, глубокий 1ч 10мин. Keep each line concise."
+        OURA_CONTEXT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 --mcp-config "$PROJECT_DIR/mcp-config.json" -p "$OURA_PROMPT" 2>&1) || OURA_CONTEXT=""
+        # Strip any preamble Claude might add
+        OURA_CONTEXT=$(echo "$OURA_CONTEXT" | grep -v '^$' | grep -v 'Here is\|Вот\|Let me\|I will\|Calling' | head -20 || echo "$OURA_CONTEXT")
+    fi
+
+    # -- Pre-REFLECT: Fetch nutrition context from Supabase --
+    NUTRITION_CONTEXT=""
+    if [ "${NUTRITION_ENABLED:-true}" = "true" ] && [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_KEY:-}" ]; then
+        echo "=== Fetching nutrition context ==="
+        NUTRITION_CONTEXT=$(uv run python "$SCRIPTS_DIR/nutrition_context.py" 2>/dev/null || echo "")
+    fi
+
+    HEALTH_SECTION=""
+    if [ -n "$OURA_CONTEXT" ]; then
+        HEALTH_SECTION="
+OURA HEALTH DATA (полный день):
+${OURA_CONTEXT}
+
+Add a health section to the HTML report (after tasks section):
+<b>🫀 Здоровье за день:</b>
+Структура: 2-3 строки.
+Строка 1: сон — одним предложением, только если что-то важное (плохой сон, рекорд, необычное).
+Строка 2: активность + стресс — корреляция с событиями дня из capture.json. Когда был пик стресса и что происходило в это время?
+Строка 3 (если нужна): один практичный вывод для завтра на основе данных.
+Не перечисляй цифры — давай ВЫВОДЫ."
+    fi
+
+    NUTRITION_SECTION=""
+    if [ -n "$NUTRITION_CONTEXT" ]; then
+        NUTRITION_SECTION="
+ПИТАНИЕ ЗА ДЕНЬ (данные из трекера):
+${NUTRITION_CONTEXT}
+
+Add a nutrition section to the HTML report (after health section):
+<b>🍽 Питание за день:</b>
+Итог: X/Y ккал (Z%). Белки/жиры/углеводы — выполнено или нет.
+Один вывод — что хорошо, что изменить завтра.
+Связь с здоровьем: если есть Oura данные — связать питание с энергией/стрессом сегодня."
+    fi
+
     echo "=== Phase 3: REFLECT ==="
     REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 \
         -p "Today is $TODAY. Read .claude/skills/dbrain-processor/phases/reflect.md and execute Phase 3.
@@ -174,6 +225,13 @@ AGENT NOTES TASK: Scan the input text for:
 
 Format for each agent_notes.md entry:
 - \`[ ]\` **[source]** description <!-- id: X-YYYYMMDD-NNN -->
+
+FORMATTING RULES (mandatory for Telegram report):
+- Tasks: ONLY name + priority + due date. NEVER include task ID (like abc123xyz).
+- Thoughts: read each saved file H1 heading, show title in RUSSIAN. NO [[wikilink]] syntax.
+- New links: plain note names without [[ ]] brackets.
+${HEALTH_SECTION}
+${NUTRITION_SECTION}
 
 Return ONLY RAW HTML (for Telegram)." \
         2>&1) || true

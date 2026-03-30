@@ -1,5 +1,6 @@
 """Photo message handler."""
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -7,6 +8,7 @@ from aiogram import Bot, Router
 from aiogram.types import Message
 
 from d_brain.config import get_settings
+from d_brain.services.git import VaultGit
 from d_brain.services.session import SessionStore
 from d_brain.services.storage import VaultStorage
 
@@ -71,6 +73,10 @@ async def handle_photo(message: Message, bot: Bot) -> None:
         )
 
         await message.answer("📷 ✓ Сохранено")
+        if settings.obsidian_sync_enabled:
+            asyncio.create_task(asyncio.to_thread(
+                VaultGit(settings.vault_path).commit_and_push, "sync: photo"
+            ))
         logger.info("Photo saved: %s", relative_path)
 
     except Exception as e:

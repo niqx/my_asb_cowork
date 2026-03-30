@@ -39,7 +39,11 @@ if [ ! -f "$NOTES_FILE" ]; then
     exit 0
 fi
 
-ITEMS=$(grep -c '`\[→\]`' "$NOTES_FILE" 2>/dev/null || echo 0)
+# grep -c returns exit code 1 (no matches) which triggers ||, producing "0\n0"
+# Fix: use ; true so grep exit code is suppressed, then default to 0
+ITEMS=$(grep -c '`\[→\]`' "$NOTES_FILE" 2>/dev/null; true)
+ITEMS="${ITEMS:-0}"
+ITEMS=$(echo "$ITEMS" | head -1 | tr -d '[:space:]')
 log "Found $ITEMS [→] items"
 
 # Check for critical errors in bot logs (alert even with 0 [→] items)
@@ -55,7 +59,7 @@ $CRIT_MSG
 Требуется проверка."
 fi
 
-if [ "$ITEMS" -eq 0 ]; then
+if [ "${ITEMS}" = "0" ] || [ "${ITEMS:-0}" -eq 0 ] 2>/dev/null; then
     log "No [→] items to implement — exiting silently"
     exit 0
 fi
@@ -71,7 +75,16 @@ claude --print --dangerously-skip-permissions \
 Read in this order:
 1. MEMORY.md — user preferences, accepted/rejected improvement patterns
 2. goals/3-weekly.md — current week priorities (skip if missing)
-3. vault/agent/agent_notes.md — find ALL lines containing \`[→]\` status
+3. vault/agent/agent_notes.md — find ONLY lines with EXACTLY \`[→]\` status
+
+STATUS LEGEND — STRICT FILTER:
+- \`[ ]\`  = new, not yet reviewed — SKIP, do NOT include
+- \`[→]\`  = approved for tonight — INCLUDE ONLY THESE
+- \`[✅]\` = already done — SKIP
+- \`[⏳]\` = concept prepared, waiting for user — SKIP
+- \`[x]\`  = rejected — SKIP
+
+If ZERO lines with \`[→]\` exist → write {\"date\": \"$TODAY\", \"items\": []} and return PLAN_WRITTEN: 0 items.
 
 Analyze the [→] items and create an implementation plan:
 

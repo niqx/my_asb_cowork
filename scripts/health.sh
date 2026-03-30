@@ -29,6 +29,26 @@ trap '
     fi
 ' EXIT
 
+# ── Fetch nutrition context from Supabase ──
+NUTRITION_CONTEXT=""
+if [ "${NUTRITION_ENABLED:-true}" = "true" ] && [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_KEY:-}" ]; then
+    echo "=== Fetching nutrition context ==="
+    NUTRITION_CONTEXT=$(cd "$PROJECT_DIR" && uv run python scripts/nutrition_context.py 2>/dev/null || echo "")
+fi
+
+NUTRITION_SECTION=""
+if [ -n "$NUTRITION_CONTEXT" ]; then
+    NUTRITION_SECTION="
+=== ПИТАНИЕ (данные из трекера) ===
+${NUTRITION_CONTEXT}
+
+Добавь в отчёт раздел питания:
+<b>🍽 Питание:</b>
+Одно наблюдение — как текущее питание коррелирует с самочувствием по Oura.
+Если калорий мало и усталость высокая — связать. Если переел и стресс — тоже.
+Один конкретный совет на остаток дня по питанию."
+fi
+
 cd "$VAULT_DIR"
 REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 \
     --mcp-config "$PROJECT_DIR/mcp-config.json" \
@@ -63,7 +83,8 @@ RULES:
 - HTML formatting only (no markdown)
 - Don't just list numbers from Oura — the user already sees those in the app
 - Focus on CORRELATIONS and INSIGHTS: connect health data with life context from vault
-- If Oura data is unavailable, say so briefly and skip" \
+- If Oura data is unavailable, say so briefly and skip
+${NUTRITION_SECTION}" \
     2>&1) || true
 cd "$PROJECT_DIR"
 
