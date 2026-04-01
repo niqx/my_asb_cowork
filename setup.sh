@@ -4,7 +4,7 @@
 # Agent Second Brain - VPS Setup Script
 # =============================================================================
 # One-command setup for your personal AI assistant
-# Usage: curl -fsSL https://raw.githubusercontent.com/YOUR_USER/agent-second-brain/main/setup.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/YOUR_USER/my_asb_cowork/main/setup.sh | bash
 # Or: bash setup.sh
 # =============================================================================
 
@@ -239,7 +239,7 @@ clone_repository() {
     step "Setting up project"
 
     PROJECTS_DIR="$HOME/projects"
-    PROJECT_DIR="$PROJECTS_DIR/agent-second-brain"
+    PROJECT_DIR="$PROJECTS_DIR/my_asb_cowork"
 
     mkdir -p "$PROJECTS_DIR"
 
@@ -263,7 +263,7 @@ clone_repository() {
         exit 1
     fi
 
-    REPO_URL="https://github.com/$GITHUB_USER/agent-second-brain.git"
+    REPO_URL="https://github.com/$GITHUB_USER/my_asb_cowork.git"
 
     info "Cloning from $REPO_URL..."
 
@@ -466,7 +466,7 @@ configure_git_remote() {
         read -r GITHUB_USER
     fi
 
-    git remote set-url origin "https://$GITHUB_TOKEN@github.com/$GITHUB_USER/agent-second-brain.git"
+    git remote set-url origin "https://$GITHUB_TOKEN@github.com/$GITHUB_USER/my_asb_cowork.git"
 
     success "Git remote configured for push"
 }
