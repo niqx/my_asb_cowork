@@ -6,7 +6,7 @@
 # Downloads setup.sh and runs it properly (not via pipe)
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/YOUR_USER/agent-second-brain/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/YOUR_USER/my_asb_cowork/main/bootstrap.sh | bash
 # =============================================================================
 
 set -e
@@ -44,7 +44,7 @@ if [ -z "$GITHUB_USER" ]; then
     exit 1
 fi
 
-SETUP_URL="https://raw.githubusercontent.com/$GITHUB_USER/agent-second-brain/main/setup.sh"
+SETUP_URL="https://raw.githubusercontent.com/$GITHUB_USER/my_asb_cowork/main/setup.sh"
 
 echo "Downloading setup script..."
 
