@@ -2,8 +2,8 @@
 type: note
 description: Generates a personalized morning briefing with task recommendations based on Todoist tasks, recent reflections, goals, weather and AI news.
 last_accessed: 2026-02-26
-relevance: 0.7
-tier: warm
+relevance: 0.46
+tier: cold
 name: morning-briefer
 ---
 

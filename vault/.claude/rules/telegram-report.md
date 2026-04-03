@@ -1,8 +1,8 @@
 ---
 type: note
 last_accessed: 2026-02-25
-relevance: 0.69
-tier: warm
+relevance: 0.45
+tier: cold
 paths: "**/REPORT*.md"
 ---
 

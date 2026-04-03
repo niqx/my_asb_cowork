@@ -2,7 +2,7 @@
 type: note
 title: About User - System Profile
 last_accessed: 2026-01-01
-relevance: 1.0
+relevance: 0.1
 tier: core
 ---
 # About User - System Profile
