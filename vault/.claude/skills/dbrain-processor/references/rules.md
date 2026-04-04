@@ -2,7 +2,7 @@
 type: note
 title: Critical Processing Rules
 last_accessed: 2026-02-25
-relevance: 0.45
+relevance: 0.43
 tier: cold
 ---
 # Critical Processing Rules
