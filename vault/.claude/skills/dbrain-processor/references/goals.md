@@ -2,7 +2,7 @@
 type: note
 title: Goals Integration
 last_accessed: 2026-02-25
-relevance: 0.43
+relevance: 0.42
 tier: cold
 ---
 # Goals Integration

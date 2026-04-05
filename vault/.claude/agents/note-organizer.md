@@ -2,7 +2,7 @@
 type: note
 description: Organize vault, find orphan notes, suggest connections, update MOC indexes, consolidate duplicates.
 last_accessed: 2026-02-25
-relevance: 0.43
+relevance: 0.42
 tier: cold
 name: note-organizer
 ---
