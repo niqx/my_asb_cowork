@@ -2,7 +2,7 @@
 type: note
 title: Memory Architecture
 last_accessed: 2026-02-26
-relevance: 0.43
+relevance: 0.42
 tier: cold
 ---
 # Memory Architecture

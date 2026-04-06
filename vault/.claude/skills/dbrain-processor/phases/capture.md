@@ -2,7 +2,7 @@
 type: note
 title: Phase 1: CAPTURE
 last_accessed: 2026-03-02
-relevance: 0.49
+relevance: 0.47
 tier: cold
 ---
 # Phase 1: CAPTURE
