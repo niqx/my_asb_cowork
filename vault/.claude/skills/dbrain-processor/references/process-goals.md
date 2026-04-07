@@ -2,7 +2,7 @@
 type: note
 title: Process Goals
 last_accessed: 2026-02-25
-relevance: 0.4
+relevance: 0.39
 tier: cold
 ---
 # Process Goals
