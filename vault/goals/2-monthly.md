@@ -2,8 +2,8 @@
 type: monthly
 updated: 2026-04-01
 last_accessed: 2026-04-01
-relevance: 0.9
-tier: active
+relevance: 0.88
+tier: warm
 ---
 
 # Monthly Priorities — April 2026

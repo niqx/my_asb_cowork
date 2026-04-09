@@ -2,7 +2,7 @@
 type: note
 title: Entry Classification
 last_accessed: 2026-02-25
-relevance: 0.37
+relevance: 0.35
 tier: cold
 ---
 # Entry Classification
