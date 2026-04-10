@@ -2,7 +2,7 @@
 type: note
 description: Reads vault/agent/agent_notes.md, analyzes last 7 days entries, proposes top improvements
 last_accessed: 2026-03-13
-relevance: 0.59
+relevance: 0.58
 tier: cold
 name: agent-improver
 ---

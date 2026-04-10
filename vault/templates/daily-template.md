@@ -2,7 +2,7 @@
 type: note
 title: {{date}}
 last_accessed: 2026-02-25
-relevance: 0.35
+relevance: 0.34
 tier: cold
 ---
 # {{date}}
