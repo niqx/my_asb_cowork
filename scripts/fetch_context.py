@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetch weather (open-meteo) and AI news from multiple sources for morning briefing."""
-import json, os, sys, urllib.request, urllib.error, xml.etree.ElementTree as ET
+import json, os, sys, time, urllib.request, urllib.error, xml.etree.ElementTree as ET
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
@@ -23,17 +23,24 @@ WMO = {
 }
 
 AI_SOURCES = [
-    ("HuggingFace",  "https://huggingface.co/blog/feed.xml"),
-    ("VentureBeat",  "https://venturebeat.com/category/ai/feed/"),
-    ("OpenAI",       "https://openai.com/blog/rss.xml"),
     ("TechCrunch",   "https://techcrunch.com/category/artificial-intelligence/feed/"),
-]
-
-SKIP_KEYWORDS = [
-    "war", "ukraine", "russia", "military", "soldier",
-    "missile", "nato", "trump", "congress", "senate", "election", "politics",
-    "prison", "arrest", "murder", "shooting", "crypto", "bitcoin", "nft",
-    "lawsuit", "court", "stock", "ipo", "acquisition",
+    ("Meduza",       "https://meduza.io/rss/all"),
+    ("Sports.ru",    "https://www.sports.ru/rss/football.xml"),
+    ("Profi.Travel", "https://profi.travel/rss"),
+    ("Tourdom.ru",   "https://www.tourdom.ru/rss/"),
+    ("RATA-news",    "https://rata-news.ru/rss"),
+    ("Tourinfo.ru",  "https://tourinfo.ru/rss"),
+    # Telegram channels via self-hosted RSSHub (localhost:1200)
+    ("TG:chtddd",               "http://localhost:1200/telegram/channel/chtddd"),
+    ("TG:eshkinkrot",           "http://localhost:1200/telegram/channel/eshkinkrot"),
+    ("TG:fckrasnodar",          "http://localhost:1200/telegram/channel/fckrasnodar"),
+    ("TG:myachPRO",             "http://localhost:1200/telegram/channel/myachPRO"),
+    ("TG:ChessMaestro",         "http://localhost:1200/telegram/channel/ChessMaestro"),
+    ("TG:Wylsared",             "http://localhost:1200/telegram/channel/Wylsared"),
+    ("TG:ai_ml_big_data",       "http://localhost:1200/telegram/channel/ai_machinelearning_big_data"),
+    ("TG:cdo_club",             "http://localhost:1200/telegram/channel/cdo_club"),
+    ("TG:leadgr",               "http://localhost:1200/telegram/channel/leadgr"),
+    ("TG:travelstartups",       "http://localhost:1200/telegram/channel/travelstartups"),
 ]
 
 
@@ -100,53 +107,83 @@ def _precip_type(wcode: int) -> str:
 
 # ── Weather ────────────────────────────────────────────────────────────────
 
+def _get_weather_openmeteo(lat, lon, tz, city):
+    url = ("https://api.open-meteo.com/v1/forecast"
+           f"?latitude={lat}&longitude={lon}"
+           "&current_weather=true"
+           "&hourly=precipitation_probability,apparent_temperature,weathercode"
+           f"&timezone={tz}&forecast_days=1")
+    d = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=15) as r:
+                d = json.load(r)
+            break
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(5)
+            else:
+                raise
+    cw = d["current_weather"]
+    desc = WMO.get(cw["weathercode"], f"код {cw['weathercode']}")
+    temp = cw["temperature"]
+    wind = cw["windspeed"]
+    hour = datetime.now().hour
+
+    feels_arr = d["hourly"].get("apparent_temperature", [])
+    precip_arr = d["hourly"].get("precipitation_probability", [])
+    hourly_wcodes = d["hourly"].get("weathercode", [])
+
+    feels = feels_arr[min(hour, len(feels_arr) - 1)] if feels_arr else None
+    feels_str = f"{feels:+.0f}°C" if isinstance(feels, (int, float)) else "?"
+
+    ranges = _precip_ranges(precip_arr, threshold=40)
+    if ranges:
+        rs, re = ranges[0]
+        range_codes = hourly_wcodes[rs: re + 1] if hourly_wcodes else []
+        dominant = max(range_codes, default=cw["weathercode"])
+        ptype = _precip_type(dominant)
+        parts = []
+        for sh, eh in ranges:
+            if eh >= 23:
+                parts.append(f"с {sh:02d}:00 и дольше суток")
+            else:
+                parts.append(f"с {sh:02d}:00 до {eh + 1:02d}:00")
+        precip_info = f", {ptype} ожидается {', '.join(parts)}"
+    else:
+        precip_info = ""
+
+    return (f"{city}: {desc}, {temp:+.0f}°C (ощущается {feels_str}), "
+            f"ветер {wind:.0f} км/ч{precip_info}")
+
+
+def _get_weather_wttr(lat, lon, city):
+    url = f"https://wttr.in/{lat},{lon}?format=j1"
+    with urllib.request.urlopen(url, timeout=15) as r:
+        d = json.load(r)
+    cc = d["current_condition"][0]
+    temp = int(cc["temp_C"])
+    feels = int(cc["FeelsLikeC"])
+    wind = int(cc["windspeedKmph"])
+    desc_en = cc["weatherDesc"][0]["value"]
+    return (f"{city}: {desc_en}, {temp:+d}°C (ощущается {feels:+d}°C), "
+            f"ветер {wind} км/ч [wttr.in]")
+
+
 def get_weather():
+    lat = os.environ.get("LOCATION_LAT", "55.75")
+    lon = os.environ.get("LOCATION_LON", "37.62")
+    tz = os.environ.get("LOCATION_TZ", "Europe/Moscow")
+    city = os.environ.get("LOCATION_CITY", "Москва")
     try:
-        lat = os.environ.get("LOCATION_LAT", "55.75")
-        lon = os.environ.get("LOCATION_LON", "37.62")
-        tz = os.environ.get("LOCATION_TZ", "Europe/Moscow")
-        city = os.environ.get("LOCATION_CITY", "Москва")
-        url = ("https://api.open-meteo.com/v1/forecast"
-               f"?latitude={lat}&longitude={lon}"
-               "&current_weather=true"
-               "&hourly=precipitation_probability,apparent_temperature,weathercode"
-               f"&timezone={tz}&forecast_days=1")
-        with urllib.request.urlopen(url, timeout=15) as r:
-            d = json.load(r)
-        cw = d["current_weather"]
-        desc = WMO.get(cw["weathercode"], f"код {cw['weathercode']}")
-        temp = cw["temperature"]
-        wind = cw["windspeed"]
-        hour = datetime.now().hour
-
-        feels_arr = d["hourly"].get("apparent_temperature", [])
-        precip_arr = d["hourly"].get("precipitation_probability", [])
-        hourly_wcodes = d["hourly"].get("weathercode", [])
-
-        feels = feels_arr[min(hour, len(feels_arr) - 1)] if feels_arr else None
-        feels_str = f"{feels:+.0f}°C" if isinstance(feels, (int, float)) else "?"
-
-        ranges = _precip_ranges(precip_arr, threshold=40)
-        if ranges:
-            rs, re = ranges[0]
-            range_codes = hourly_wcodes[rs: re + 1] if hourly_wcodes else []
-            dominant = max(range_codes, default=cw["weathercode"])
-            ptype = _precip_type(dominant)
-            parts = []
-            for sh, eh in ranges:
-                if eh >= 23:
-                    parts.append(f"с {sh:02d}:00 и дольше суток")
-                else:
-                    parts.append(f"с {sh:02d}:00 до {eh + 1:02d}:00")
-            precip_info = f", {ptype} ожидается {', '.join(parts)}"
-        else:
-            precip_info = ""
-
-        return (f"{city}: {desc}, {temp:+.0f}°C (ощущается {feels_str}), "
-                f"ветер {wind:.0f} км/ч{precip_info}")
-    except Exception as e:
-        print(f"[fetch_context] weather error: {e}", file=sys.stderr)
-        return f"погода недоступна ({e})"
+        return _get_weather_openmeteo(lat, lon, tz, city)
+    except Exception as e1:
+        print(f"[fetch_context] open-meteo failed ({e1}), trying wttr.in", file=sys.stderr)
+        try:
+            return _get_weather_wttr(lat, lon, city)
+        except Exception as e2:
+            print(f"[fetch_context] wttr.in also failed: {e2}", file=sys.stderr)
+            return f"погода недоступна ({e1}; {e2})"
 
 
 # ── RSS ────────────────────────────────────────────────────────────────────
@@ -162,8 +199,6 @@ def fetch_rss(rss_url: str, count: int = 6) -> list:
             t = item.find("title")
             if t is not None and t.text:
                 title = t.text.strip()
-                if any(kw in title.lower() for kw in SKIP_KEYWORDS):
-                    continue
                 # Extract article URL from <link> or <guid>
                 art_url = ""
                 link_el = item.find("link")

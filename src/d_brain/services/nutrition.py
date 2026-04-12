@@ -98,7 +98,7 @@ class NutritionService:
         daily_fat: float = _DEFAULT_FAT,
         daily_carbs: float = _DEFAULT_CARBS,
     ) -> None:
-        self._claude = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
+        self._claude = anthropic.AsyncAnthropic(api_key=anthropic_api_key or None)
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
         self._daily_kcal = daily_kcal

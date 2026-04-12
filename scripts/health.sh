@@ -36,17 +36,10 @@ if [ "${NUTRITION_ENABLED:-true}" = "true" ] && [ -n "${SUPABASE_URL:-}" ] && [ 
     NUTRITION_CONTEXT=$(cd "$PROJECT_DIR" && uv run python scripts/nutrition_context.py 2>/dev/null || echo "")
 fi
 
-NUTRITION_SECTION=""
+NUTRITION_BLOCK=""
 if [ -n "$NUTRITION_CONTEXT" ]; then
-    NUTRITION_SECTION="
-=== ПИТАНИЕ (данные из трекера) ===
-${NUTRITION_CONTEXT}
-
-Добавь в отчёт раздел питания:
-<b>🍽 Питание:</b>
-Одно наблюдение — как текущее питание коррелирует с самочувствием по Oura.
-Если калорий мало и усталость высокая — связать. Если переел и стресс — тоже.
-Один конкретный совет на остаток дня по питанию."
+    NUTRITION_BLOCK="=== ПИТАНИЕ (данные из трекера) ===
+${NUTRITION_CONTEXT}"
 fi
 
 cd "$VAULT_DIR"
@@ -58,33 +51,33 @@ REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6
 1. Call Oura MCP tools to get TODAY's data:
    - get_daily_sleep (last night's sleep score, duration, efficiency)
    - get_readiness (recovery score)
-   - get_stress (current stress level)
+   - get_daily_stress (current stress level)
    - get_heart_rate (resting HR, current trends)
-   - analyze_hrv_trend (HRV context)
 2. Read today's daily log from vault (if exists) and yesterday's daily log
-3. Read goals/3-weekly.md for current priorities
+
+${NUTRITION_BLOCK}
 
 === OUTPUT FORMAT ===
-Generate a SHORT Telegram message in HTML. NOT a data dump — an insightful check-in:
+Generate a Telegram message in HTML. NOT a data dump — an insightful check-in.
 
 <b>🫀 Здоровье — полдень</b>
 
-<b>Ночь:</b> One sentence verdict — good/bad sleep, recovered or not. Only mention numbers if something is unusual.
+<b>Ночь:</b> One sentence verdict — good/bad sleep, recovered or not. Mention numbers only if something is unusual.
 
-<b>Сейчас:</b> Stress/HRV assessment. If stress is elevated or HRV is low — ask WHY, reference what's in today's calendar or recent notes.
+<b>Сейчас:</b> Stress/HRV assessment. If stress is elevated or HRV is low — reference what's in today's notes or calendar.
 
-<b>Рекомендация:</b> One actionable suggestion for the rest of the day, based on current state + today's planned tasks.
+<b>🍽 Питание:</b> ALWAYS include this block. Show: calories eaten vs goal (e.g. «1200 из 2650 ккал»), key macros status (protein/fat/carbs). Then one sentence correlating food data with Oura readings — e.g. low calories + high fatigue, or good protein intake supporting recovery. End with one concrete food tip for the rest of the day.
 
-If stress is high, end with a question prompting reflection: 'Что сейчас давит? Расскажи.'
+<b>Рекомендация:</b> One actionable suggestion combining health state + nutrition + today's tasks.
+
+If stress is high, end with: 'Что сейчас давит? Расскажи.'
 
 RULES:
-- Max 10 lines total
 - Russian language
 - HTML formatting only (no markdown)
-- Don't just list numbers from Oura — the user already sees those in the app
-- Focus on CORRELATIONS and INSIGHTS: connect health data with life context from vault
-- If Oura data is unavailable, say so briefly and skip
-${NUTRITION_SECTION}" \
+- Don't just list raw numbers — give insights and correlations
+- If Oura data is unavailable, say so briefly and skip those sections
+- If no meals logged yet, note it and suggest logging first meal" \
     2>&1) || true
 cd "$PROJECT_DIR"
 

@@ -219,16 +219,14 @@ def main() -> None:
 
         text                  = fetch_article(url)
         title_ru, summary     = generate_summary(title, text)
-        agent_note            = generate_agent_note(title, text, source) if text else None
 
         enriched.append({
-            "source":     source,
-            "title":      title,
-            "title_ru":   title_ru,
-            "url":        url,
-            "text":       text[:50000] if text else "",
-            "summary":    summary,
-            "agent_note": agent_note,
+            "source":   source,
+            "title":    title,
+            "title_ru": title_ru,
+            "url":      url,
+            "text":     text[:50000] if text else "",
+            "summary":  summary,
         })
 
     # Write morning-news.json (without full text to keep it small)
@@ -240,9 +238,6 @@ def main() -> None:
     )
     print(f"[fetch_news] Saved morning-news.json ({len(news_out)} articles)", file=sys.stderr)
 
-    # Write to vault
-    save_to_vault_daily(enriched)
-    append_agent_notes(enriched)
 
 
 if __name__ == "__main__":
