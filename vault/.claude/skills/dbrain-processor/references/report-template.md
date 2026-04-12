@@ -2,7 +2,7 @@
 type: note
 title: HTML Report Template
 last_accessed: 2026-02-25
-relevance: 0.33
+relevance: 0.31
 tier: cold
 ---
 # HTML Report Template

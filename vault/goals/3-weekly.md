@@ -1,10 +1,10 @@
 ---
 type: weekly
-period: 2026-W16
 updated: 2026-04-12
 last_accessed: 2026-04-12
 relevance: 1.0
 tier: active
+period: 2026-W16
 ---
 
 # Weekly Plan — 12–18 апреля 2026
