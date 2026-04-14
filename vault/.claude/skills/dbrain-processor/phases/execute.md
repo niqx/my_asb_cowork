@@ -85,6 +85,25 @@ For all created/updated files:
 mcp-cli call todoist find-tasks-by-date '{"startDate": "today", "daysCount": 7}'
 ```
 
+### 6. Handle patterns from capture.json
+
+Read `patterns` array from capture.json. For each detected pattern, create the suggested_tasks in Todoist:
+
+```bash
+# Example for doc-heavy pattern
+mcp-cli call todoist add-tasks '{"tasks": [{"content": "Follow-up: ...", "priority": 2, "dueString": "tomorrow"}]}'
+```
+
+**Priority and due by pattern type:**
+
+| Pattern type | Priority | Due |
+|---|---|---|
+| `doc-heavy` | 2 (high) | tomorrow |
+| `competitive-gap` | 2 (high) | this week |
+| `stale-weekly-goal` | 3 (medium) | today |
+
+Add created task IDs to output under `pattern_tasks_created`. Skip if `patterns` is empty or missing.
+
 ## mcp-cli retry algorithm
 
 ```
@@ -120,6 +139,9 @@ Print ONLY valid JSON:
   "workload": {
     "mon": 3, "tue": 2, "wed": 4, "thu": 1, "fri": 2, "sat": 0, "sun": 0
   },
-  "observations": []
+  "observations": [],
+  "pattern_tasks_created": [
+    {"pattern": "doc-heavy", "content": "Follow-up: ...", "id": "8501234568"}
+  ]
 }
 ```

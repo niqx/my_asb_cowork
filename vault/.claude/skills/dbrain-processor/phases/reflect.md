@@ -30,6 +30,7 @@ Use the template from SKILL.md. Include:
 - Vault Health score (from latest health-history.json entry, if exists)
 - Top 3 priorities
 - Observations (if any)
+- Pattern alerts (if any patterns detected in capture.json)
 
 ### 2. Log actions to daily
 
@@ -84,6 +85,14 @@ Follow the HTML template exactly:
 - Only use: `<b>`, `<i>`, `<code>`, `<s>`, `<u>`, `<a>`
 - NO: `<div>`, `<br>`, `<table>`, markdown syntax
 - Max 4096 characters
+
+### Pattern alerts section (add to report if patterns detected):
+
+```html
+<b>🔍 Авто-детекция:</b>
+• [doc-heavy] 2 транскрипции встреч → создано 2 follow-up задачи
+• [stale-weekly-goal] 3-weekly.md не менялась 5 дней → добавлена задача обновить цели
+```
 
 ### Vault Health section (add to report if data exists):
 
