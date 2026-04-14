@@ -36,10 +36,10 @@ sudo systemctl start d-brain-weekly.timer
 
 # Grant myuser NOPASSWD for d-brain-bot control (needed for cron/systemd context)
 sudo tee /etc/sudoers.d/d-brain > /dev/null << 'EOF'
-myuser ALL=(ALL) NOPASSWD: /bin/systemctl stop d-brain-bot, /bin/systemctl start d-brain-bot
+myuser ALL=(ALL) NOPASSWD: /bin/systemctl stop d-brain-bot, /bin/systemctl start d-brain-bot, /usr/bin/timedatectl set-timezone *
 EOF
 sudo chmod 0440 /etc/sudoers.d/d-brain
-echo "Sudoers rule installed: myuser can stop/start d-brain-bot without password"
+echo "Sudoers rule installed: myuser can stop/start d-brain-bot and set timezone without password"
 
 echo "Done! Next run:"
 systemctl list-timers d-brain-weekly.timer --no-pager

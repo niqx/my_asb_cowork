@@ -25,11 +25,9 @@ WMO = {
 AI_SOURCES = [
     ("TechCrunch",   "https://techcrunch.com/category/artificial-intelligence/feed/"),
     ("Meduza",       "https://meduza.io/rss/all"),
-    ("Sports.ru",    "https://www.sports.ru/rss/football.xml"),
-    ("Profi.Travel", "https://profi.travel/rss"),
-    ("Tourdom.ru",   "https://www.tourdom.ru/rss/"),
-    ("RATA-news",    "https://rata-news.ru/rss"),
-    ("Tourinfo.ru",  "https://tourinfo.ru/rss"),
+    ("Sports.ru",    "https://www.sports.ru/rss/main.xml"),
+    ("RATA-news",    "https://ratanews.ru/rss.xml"),
+    ("RTourNews",    "https://rtournews.ru/rss"),
     # Telegram channels via self-hosted RSSHub (localhost:1200)
     ("TG:chtddd",               "http://localhost:1200/telegram/channel/chtddd"),
     ("TG:eshkinkrot",           "http://localhost:1200/telegram/channel/eshkinkrot"),
