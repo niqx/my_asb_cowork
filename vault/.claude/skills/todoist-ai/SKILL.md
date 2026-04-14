@@ -2,7 +2,7 @@
 type: note
 description: MCP server and tools for connecting AI agents to Todoist
 last_accessed: 2026-02-25
-relevance: 0.3
+relevance: 0.28
 tier: cold
 name: todoist-ai
 ---

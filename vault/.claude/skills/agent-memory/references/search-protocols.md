@@ -2,7 +2,7 @@
 type: note
 title: Search Protocols
 last_accessed: 2026-02-26
-relevance: 0.31
+relevance: 0.3
 tier: cold
 ---
 # Search Protocols
