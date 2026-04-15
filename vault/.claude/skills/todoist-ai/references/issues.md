@@ -2,7 +2,7 @@
 type: note
 title: GitHub Issues
 last_accessed: 2026-02-25
-relevance: 0.28
+relevance: 0.27
 tier: cold
 ---
 # GitHub Issues
