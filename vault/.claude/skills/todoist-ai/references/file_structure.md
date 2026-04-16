@@ -2,7 +2,7 @@
 type: note
 title: Repository File Structure
 last_accessed: 2026-02-25
-relevance: 0.27
+relevance: 0.25
 tier: cold
 ---
 # Repository File Structure
