@@ -2,7 +2,7 @@
 type: note
 title: Domain Configuration
 last_accessed: 2026-02-25
-relevance: 0.25
+relevance: 0.23
 tier: cold
 ---
 # Domain Configuration
