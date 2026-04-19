@@ -2,7 +2,7 @@
 type: note
 title: Frontmatter Schema
 last_accessed: 2026-02-25
-relevance: 0.22
+relevance: 0.21
 tier: cold
 ---
 # Frontmatter Schema
