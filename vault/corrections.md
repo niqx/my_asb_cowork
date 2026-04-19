@@ -1,7 +1,7 @@
 ---
 type: note
 last_accessed: 2026-03-19
-relevance: 0.98
+relevance: 1.0
 tier: active
 ---
 # Словарь исправлений транскрипций
