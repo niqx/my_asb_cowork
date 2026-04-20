@@ -2,7 +2,7 @@
 type: note
 title: YAML Frontmatter Schema
 last_accessed: 2026-02-26
-relevance: 0.22
+relevance: 0.21
 tier: cold
 ---
 # YAML Frontmatter Schema
