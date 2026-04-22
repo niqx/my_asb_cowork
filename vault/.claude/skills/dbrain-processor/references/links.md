@@ -2,7 +2,7 @@
 type: note
 title: Wiki-Links Building
 last_accessed: 2026-02-25
-relevance: 0.18
+relevance: 0.16
 tier: cold
 ---
 # Wiki-Links Building
