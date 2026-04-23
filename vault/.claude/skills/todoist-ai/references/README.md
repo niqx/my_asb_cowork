@@ -2,7 +2,7 @@
 type: note
 title: Todoist AI and MCP SDK
 last_accessed: 2026-02-25
-relevance: 0.16
+relevance: 0.15
 tier: cold
 ---
 # Todoist AI and MCP SDK
