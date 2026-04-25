@@ -2,7 +2,7 @@
 type: note
 description: Generate weekly digest with goal progress, wins, challenges, and next week planning. Run on Sundays.
 last_accessed: 2026-02-25
-relevance: 0.13
+relevance: 0.11
 tier: cold
 name: weekly-digest
 ---
