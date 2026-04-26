@@ -2,7 +2,7 @@
 type: vision
 updated: 2026-03-31
 last_accessed: 2026-03-31
-relevance: 0.62
+relevance: 0.61
 tier: core
 horizon: 3-years
 period: 2026-2028
