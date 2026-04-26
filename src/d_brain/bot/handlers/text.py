@@ -11,6 +11,7 @@ from aiogram.types import Message
 
 from d_brain.config import get_settings
 from d_brain.services.git import VaultGit
+from d_brain.services.goals import GoalsService
 from d_brain.services.reflection import ReflectionService
 from d_brain.services.session import SessionStore
 from d_brain.services.storage import VaultStorage
@@ -113,6 +114,14 @@ async def handle_text(message: Message) -> None:
     if week:
         reflection.append_entry(week, message.text, source="text")
         extra = " (+ рефлексия недели)"
+
+    # --- goals review ---
+    if not week:
+        goals = GoalsService(settings.vault_path)
+        goals_week = goals.get_pending_week()
+        if goals_week:
+            goals.append_correction(goals_week, message.text, source="text")
+            extra = " (+ правка целей)"
 
     await message.answer(f"✓ Сохранено{extra}")
     logger.info("Text message saved: %d chars%s", len(message.text), extra)

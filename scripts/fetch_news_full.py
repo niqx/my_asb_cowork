@@ -21,7 +21,7 @@ MORNING_NEWS    = _SESSION / "morning-news.json"
 AGENT_NOTES     = _AGENT   / "agent_notes.md"
 
 TODAY        = date.today().isoformat()
-MAX_ARTICLES = 5   # max articles to fully fetch
+MAX_ARTICLES = 15  # max articles to fully fetch (1 per source)
 
 
 # ── Claude haiku subprocess ────────────────────────────────────────────────

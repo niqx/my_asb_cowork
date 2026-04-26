@@ -45,39 +45,38 @@ fi
 cd "$VAULT_DIR"
 REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 \
     --mcp-config "$PROJECT_DIR/mcp-config.json" \
-    -p "Today is $TODAY ($WEEKDAY), time: 12:00 midday. Generate a HEALTH CHECK message.
+    -p "Today is $TODAY ($WEEKDAY), time: 23:00 evening. Generate an END-OF-DAY HEALTH SUMMARY message.
 
 === INSTRUCTIONS ===
 1. Call Oura MCP tools to get TODAY's data:
    - get_daily_sleep (last night's sleep score, duration, efficiency)
    - get_readiness (recovery score)
-   - get_daily_stress (current stress level)
-   - get_heart_rate (resting HR, current trends)
-2. Read today's daily log from vault (if exists) and yesterday's daily log
+   - get_daily_stress (full day stress timeline)
+   - get_heart_rate (resting HR, daily trends)
+   - get_daily_activity (steps, active calories, movement goal)
+2. Read today's daily log from vault (if exists)
 
 ${NUTRITION_BLOCK}
 
 === OUTPUT FORMAT ===
-Generate a Telegram message in HTML. NOT a data dump — an insightful check-in.
+Generate a Telegram message in HTML. NOT a data dump — an insightful end-of-day summary.
 
-<b>🫀 Здоровье — полдень</b>
+<b>🫀 Здоровье — итог дня</b>
 
 <b>Ночь:</b> One sentence verdict — good/bad sleep, recovered or not. Mention numbers only if something is unusual.
 
-<b>Сейчас:</b> Stress/HRV assessment. If stress is elevated or HRV is low — reference what's in today's notes or calendar.
+<b>День:</b> Stress and activity summary. Correlate stress peaks with what happened today (from daily notes). Steps vs goal.
 
-<b>🍽 Питание:</b> ALWAYS include this block. Show: calories eaten vs goal (e.g. «1200 из 2650 ккал»), key macros status (protein/fat/carbs). Then one sentence correlating food data with Oura readings — e.g. low calories + high fatigue, or good protein intake supporting recovery. End with one concrete food tip for the rest of the day.
+<b>🍽 Питание:</b> ALWAYS include this block. Show: total calories vs goal, key macros status (protein/fat/carbs). One sentence on how nutrition correlated with energy and stress today.
 
-<b>Рекомендация:</b> One actionable suggestion combining health state + nutrition + today's tasks.
-
-If stress is high, end with: 'Что сейчас давит? Расскажи.'
+<b>Итог:</b> One sentence overall assessment of the day — recovered, stressed, active, or resting. One tip for tonight (sleep hygiene, wind-down).
 
 RULES:
 - Russian language
 - HTML formatting only (no markdown)
 - Don't just list raw numbers — give insights and correlations
 - If Oura data is unavailable, say so briefly and skip those sections
-- If no meals logged yet, note it and suggest logging first meal" \
+- Focus on END-OF-DAY perspective, not midday check-in" \
     2>&1) || true
 cd "$PROJECT_DIR"
 

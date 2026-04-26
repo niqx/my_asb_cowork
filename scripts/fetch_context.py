@@ -24,13 +24,10 @@ WMO = {
 
 AI_SOURCES = [
     ("TechCrunch",   "https://techcrunch.com/category/artificial-intelligence/feed/"),
-    ("Meduza",       "https://meduza.io/rss/all"),
     ("Sports.ru",    "https://www.sports.ru/rss/main.xml"),
     ("RATA-news",    "https://ratanews.ru/rss.xml"),
     ("RTourNews",    "https://rtournews.ru/rss"),
     # Telegram channels via self-hosted RSSHub (localhost:1200)
-    ("TG:chtddd",               "http://localhost:1200/telegram/channel/chtddd"),
-    ("TG:eshkinkrot",           "http://localhost:1200/telegram/channel/eshkinkrot"),
     ("TG:fckrasnodar",          "http://localhost:1200/telegram/channel/fckrasnodar"),
     ("TG:myachPRO",             "http://localhost:1200/telegram/channel/myachPRO"),
     ("TG:ChessMaestro",         "http://localhost:1200/telegram/channel/ChessMaestro"),
@@ -226,19 +223,33 @@ def get_ai_news() -> list:
         if key not in seen:
             new_articles.append(a)
 
-    top = new_articles[:20]
+    # Round-robin by source: 1 article per source (guaranteed coverage)
+    from collections import defaultdict
+    by_source: dict = defaultdict(list)
+    for a in new_articles:
+        by_source[a["source"]].append(a)
+
+    headlines: list = []
+    buckets = [by_source[s] for s, _ in AI_SOURCES if by_source[s]]
+    while buckets:
+        for bucket in buckets:
+            if bucket:
+                headlines.append(bucket.pop(0))
+        buckets = [b for b in buckets if b]
+
+    top = headlines[:20]
 
     # Persist seen keys
     new_keys = [a["url"] or a["title"] for a in top]
     if new_keys:
         save_seen(new_keys)
 
-    # Save raw headlines for fetch_news_full.py
+    # Save raw headlines for fetch_news_full.py (1 per source = up to 15)
     try:
         _SESSION.mkdir(parents=True, exist_ok=True)
         HEADLINES_PATH.write_text(json.dumps({
             "date": date.today().isoformat(),
-            "articles": top[:8],  # top 8 for full fetch
+            "articles": top[:15],
         }, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         print(f"[fetch_context] save headlines error: {e}", file=sys.stderr)

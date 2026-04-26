@@ -9,6 +9,7 @@ from aiogram.types import Message
 from d_brain.config import get_settings
 from d_brain.services.git import VaultGit
 from d_brain.services.corrections import CorrectionsService
+from d_brain.services.goals import GoalsService
 from d_brain.services.reflection import ReflectionService
 from d_brain.services.session import SessionStore
 from d_brain.services.storage import VaultStorage
@@ -119,6 +120,13 @@ async def handle_voice(message: Message, bot: Bot) -> None:
         if week:
             reflection.append_entry(week, corrected, source="voice")
             extra = " (+ рефлексия недели)"
+
+        # --- goals review ---
+        goals = GoalsService(settings.vault_path)
+        goals_week = goals.get_pending_week()
+        if goals_week and not week:
+            goals.append_correction(goals_week, corrected, source="voice")
+            extra = " (+ правка целей)"
 
         # --- reply ---
         footer = f"✓ Сохранено{extra}"

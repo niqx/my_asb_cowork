@@ -153,6 +153,19 @@ class NutritionService:
         """Return the last N meal records."""
         return await asyncio.to_thread(self._fetch_recent_meals, user_id, limit)
 
+    async def get_nutrition_offenders(self, user_id: int, days: int = 7) -> list[dict[str, Any]]:
+        """Return products that appeared ≥2 times as calorie offenders in the last N days."""
+        return await asyncio.to_thread(self._fetch_calorie_offenders, user_id, days)
+
+    def format_offenders_block(self, offenders: list[dict[str, Any]]) -> str:
+        """Format a report block for repeated calorie offenders."""
+        if not offenders:
+            return ""
+        lines = []
+        for item in offenders:
+            lines.append(f"⚠️ Паттерн: {item['product']} {item['count']} раз за 7 дней {item['trend']}")
+        return "\n".join(lines)
+
     async def ensure_tables(self) -> None:
         """Create Supabase tables if they don't exist yet (idempotent)."""
         await asyncio.to_thread(self._create_tables)
@@ -195,6 +208,8 @@ class NutritionService:
             if raw.startswith("json"):
                 raw = raw[4:]
         data = json.loads(raw)
+        if isinstance(data, list):
+            data = data[0]
         return MealAnalysis(
             meal_type=data.get("meal_type", "перекус"),
             description=data.get("description", ""),
@@ -308,6 +323,44 @@ class NutritionService:
             .execute()
         )
         return result.data or []
+
+    def _fetch_calorie_offenders(self, user_id: int, days: int) -> list[dict[str, Any]]:
+        from collections import Counter
+        from datetime import timedelta
+        db = self._get_db()
+        since = (date.today() - timedelta(days=days - 1)).isoformat()
+        per_meal_threshold = self._daily_kcal // 3
+        result = (
+            db.table("meals")
+            .select("logged_at,description,calories")
+            .eq("user_id", user_id)
+            .gte("logged_at", since)
+            .order("logged_at")
+            .execute()
+        )
+        meals = result.data or []
+        offender_meals = [m for m in meals if (m.get("calories") or 0) > per_meal_threshold]
+        counts: Counter = Counter(
+            m.get("description", "").lower().strip() for m in offender_meals
+        )
+        mid_str = (date.today() - timedelta(days=days // 2)).isoformat()
+        first_half = [m for m in offender_meals if (m.get("logged_at") or "") < mid_str]
+        second_half = [m for m in offender_meals if (m.get("logged_at") or "") >= mid_str]
+        first_counts: Counter = Counter(
+            m.get("description", "").lower().strip() for m in first_half
+        )
+        second_counts: Counter = Counter(
+            m.get("description", "").lower().strip() for m in second_half
+        )
+        result_list = []
+        for product, count in counts.items():
+            if count >= 2 and product:
+                f = first_counts.get(product, 0)
+                s = second_counts.get(product, 0)
+                trend = "↑" if s > f else ("↓" if s < f else "→")
+                result_list.append({"product": product, "count": count, "trend": trend})
+        result_list.sort(key=lambda x: x["count"], reverse=True)
+        return result_list
 
     def _fetch_recent_meals(self, user_id: int, limit: int) -> list[dict[str, Any]]:
         db = self._get_db()

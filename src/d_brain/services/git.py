@@ -24,8 +24,8 @@ class VaultGit:
         )
 
     def get_status(self) -> str:
-        """Get git status."""
-        result = self._run_git("status", "--porcelain")
+        """Get git status (scoped to vault directory only)."""
+        result = self._run_git("status", "--porcelain", "--", ".")
         return result.stdout
 
     def has_changes(self) -> bool:
@@ -54,7 +54,8 @@ class VaultGit:
         # Commit
         commit_result = self._run_git("commit", "-m", message)
         if commit_result.returncode != 0:
-            logger.error("Git commit failed: %s", commit_result.stderr)
+            detail = (commit_result.stderr or commit_result.stdout).strip()
+            logger.error("Git commit failed: %s", detail)
             return False
 
         logger.info("Committed: %s", message)
