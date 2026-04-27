@@ -3,7 +3,7 @@ type: note
 description: GTD-style processing of incoming entries. Decide action for each item - do now, schedule, delegate, save, or delete.
 last_accessed: 2026-02-25
 relevance: 0.1
-tier: cold
+tier: archive
 name: inbox-processor
 ---
 
