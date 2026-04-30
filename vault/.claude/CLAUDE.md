@@ -2,7 +2,7 @@
 type: note
 title: Agent Second Brain
 last_accessed: 2026-03-02
-relevance: 0.13
+relevance: 0.11
 tier: cold
 ---
 # Agent Second Brain

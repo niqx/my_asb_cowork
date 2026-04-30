@@ -2,7 +2,7 @@
 type: yearly
 updated: 2026-03-31
 last_accessed: 2026-03-31
-relevance: 0.56
+relevance: 0.55
 tier: core
 horizon: 1-year
 period: "2026"
