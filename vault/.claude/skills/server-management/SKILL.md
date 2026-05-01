@@ -2,7 +2,7 @@
 type: note
 description: Use when setting up new servers, initial server configuration, connecting to servers, deploying, managing Docker, or any SSH/remote operations. Triggers on words like new server, VPS setup, initial setup, configure server, SSH, deploy, docker, production, remote.
 last_accessed: 2026-03-06
-relevance: 0.18
+relevance: 0.16
 tier: cold
 name: server-management
 ---
