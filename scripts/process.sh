@@ -160,12 +160,11 @@ mcp-cli may take 10-30 sec on first call (server startup). Retry 3x on error." \
     OURA_CONTEXT=""
     if [ "${HEALTH_ENABLED:-false}" = "true" ]; then
         echo "=== Fetching Oura health context ==="
-        OURA_PROMPT="Today is $TODAY. Call ALL of the following Oura MCP tools and return a compact plain text summary in Russian (no HTML, no markdown):
-1. get_daily_sleep — ночной сон: score, duration, efficiency, deep/REM/light breakdown
-2. get_readiness — readiness score + key contributors (HRV balance, recovery index, body temperature)
-3. get_stress — stress level timeline over the day, peak stress moments
-4. get_heart_rate — resting HR, any notable spikes or drops
-5. get_daily_activity — шаги, active calories, distance, movement goal progress
+        OURA_PROMPT="Today is $TODAY. Call ALL of the following Oura MCP tools with start_date='$TODAY' and end_date='$TODAY', then return a compact plain text summary in Russian (no HTML, no markdown):
+1. oura_get_daily_sleep — ночной сон: score, duration, efficiency, deep/REM/light breakdown
+2. oura_get_daily_stress — stress level timeline over the day, peak stress moments
+3. oura_get_heartrate — resting HR, any notable spikes or drops
+4. oura_get_daily_activity — шаги, active calories, distance, movement goal progress
 Format: one line per metric category, values in brackets. Example: Сон: [score=78] 7ч 20мин, эффективность 88%, глубокий 1ч 10мин. Keep each line concise."
         OURA_CONTEXT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 --mcp-config "$PROJECT_DIR/mcp-config.json" -p "$OURA_PROMPT" 2>&1) || OURA_CONTEXT=""
         # Strip any preamble Claude might add

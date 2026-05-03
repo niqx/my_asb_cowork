@@ -48,12 +48,11 @@ REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6
     -p "Today is $TODAY ($WEEKDAY), time: 23:00 evening. Generate an END-OF-DAY HEALTH SUMMARY message.
 
 === INSTRUCTIONS ===
-1. Call Oura MCP tools to get TODAY's data:
-   - get_daily_sleep (last night's sleep score, duration, efficiency)
-   - get_readiness (recovery score)
-   - get_daily_stress (full day stress timeline)
-   - get_heart_rate (resting HR, daily trends)
-   - get_daily_activity (steps, active calories, movement goal)
+1. Call Oura MCP tools to get TODAY's data (pass start_date='$TODAY' and end_date='$TODAY' to each):
+   - oura_get_daily_sleep (last night's sleep score, duration, efficiency)
+   - oura_get_daily_stress (full day stress timeline)
+   - oura_get_heartrate (resting HR, daily trends)
+   - oura_get_daily_activity (steps, active calories, movement goal)
 2. Read today's daily log from vault (if exists)
 
 ${NUTRITION_BLOCK}
