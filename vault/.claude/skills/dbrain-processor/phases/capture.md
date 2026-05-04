@@ -122,7 +122,13 @@ After classifying all entries, scan for content signals and populate the `patter
 **Action:** Propose task to review/update weekly goals  
 **Why:** After vacation, context switch, or week end — weekly goals go stale and mislead processing.
 
-Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal`  
+### Pattern: sunday-review-pending
+**Trigger:** date == воскресенье AND any entry contains: «плоды», «собирать на следующей», «разобраться на следующей», «итоги недели», «следующей неделе»  
+**Action:** Extract the topic from the matching entry and propose a review task  
+**Suggested task:** «Разобрать итоги недели: [тема из записи]», priority=3, due=monday  
+**Why:** Воскресные записи с итогами недели часто не конвертируются в задачу на понедельник.
+
+Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal` | `sunday-review-pending`  
 Only add a pattern if it clearly applies — don't force it. Empty `patterns: []` is fine.
 
 ## Important

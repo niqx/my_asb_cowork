@@ -31,6 +31,7 @@ Use the template from SKILL.md. Include:
 - Top 3 priorities
 - Observations (if any)
 - Pattern alerts (if any patterns detected in capture.json)
+- OBT-alert (if ONE Big Thing not covered N days in a row)
 
 ### 2. Log actions to daily
 
@@ -101,6 +102,23 @@ Follow the HTML template exactly:
 Orphans: {N} | Broken: {M} | Avg links: {X}
 ```
 
+
+### OBT-alert section (add to report if OBT not covered):
+
+**Logic:**
+1. Read `one_big_thing` from `.session/capture.json`
+2. Check if any task in `execute.json tasks_created` mentions OBT (substring match)
+3. Read yesterday's daily `daily/YYYY-MM-DD.md` (previous day) and yesterday's `execute.json` if cached, OR check if yesterday's daily log contains OBT-task reference
+4. Count consecutive days N without OBT-linked task (today + look back through daily logs)
+5. If N ≥ 1 (today has no OBT-linked task) — add alert to report:
+
+```html
+<b>⚠️ OBT не отмечен {N}-й день подряд</b>
+OBT: «{one_big_thing}»
+→ Перенести слот? Предлагаю: <b>{suggested_day}</b>
+```
+
+Where `suggested_day` = closest upcoming weekday with low workload (from execute.json workload map).
 
 ### 6. Update agent_notes.md
 

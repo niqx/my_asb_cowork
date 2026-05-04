@@ -11,9 +11,10 @@ if [ "${HEALTH_ENABLED:-false}" != "true" ]; then
     exit 0
 fi
 
-WEEKDAY=$(LC_TIME=ru_RU.UTF-8 date +%A 2>/dev/null || date +%A)
+YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
+WEEKDAY=$(LC_TIME=ru_RU.UTF-8 date -d "yesterday" +%A 2>/dev/null || date -d "yesterday" +%A)
 
-echo "=== Health check for $TODAY ==="
+echo "=== Health check for $YESTERDAY (yesterday) ==="
 
 # ── FREE RAM: stop bot during heavy processing ──
 BOT_WAS_RUNNING=false
@@ -45,15 +46,15 @@ fi
 cd "$VAULT_DIR"
 REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 \
     --mcp-config "$PROJECT_DIR/mcp-config.json" \
-    -p "Today is $TODAY ($WEEKDAY), time: 23:00 evening. Generate an END-OF-DAY HEALTH SUMMARY message.
+    -p "Yesterday was $YESTERDAY ($WEEKDAY). It is now 00:30 night. Generate an END-OF-DAY HEALTH SUMMARY for YESTERDAY.
 
 === INSTRUCTIONS ===
-1. Call Oura MCP tools to get TODAY's data (pass start_date='$TODAY' and end_date='$TODAY' to each):
+1. Call Oura MCP tools to get YESTERDAY's data (pass start_date='$YESTERDAY' and end_date='$YESTERDAY' to each):
    - oura_get_daily_sleep (last night's sleep score, duration, efficiency)
    - oura_get_daily_stress (full day stress timeline)
    - oura_get_heartrate (resting HR, daily trends)
    - oura_get_daily_activity (steps, active calories, movement goal)
-2. Read today's daily log from vault (if exists)
+2. Read yesterday's daily log from vault (file name contains $YESTERDAY, if exists)
 
 ${NUTRITION_BLOCK}
 
@@ -75,7 +76,7 @@ RULES:
 - HTML formatting only (no markdown)
 - Don't just list raw numbers — give insights and correlations
 - If Oura data is unavailable, say so briefly and skip those sections
-- Focus on END-OF-DAY perspective, not midday check-in" \
+- All data refers to YESTERDAY ($YESTERDAY), not today" \
     2>&1) || true
 cd "$PROJECT_DIR"
 

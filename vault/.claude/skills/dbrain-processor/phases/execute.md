@@ -101,8 +101,24 @@ mcp-cli call todoist add-tasks '{"tasks": [{"content": "Follow-up: ...", "priori
 | `doc-heavy` | 2 (high) | tomorrow |
 | `competitive-gap` | 2 (high) | this week |
 | `stale-weekly-goal` | 3 (medium) | today |
+| `sunday-review-pending` | 3 (medium) | monday |
 
 Add created task IDs to output under `pattern_tasks_created`. Skip if `patterns` is empty or missing.
+
+### 7. OBT escalation (N≥2)
+
+**Logic:**
+1. Read `one_big_thing` from `.session/capture.json`
+2. Check `tasks_created` in current execute.json output — any task content matching OBT?
+3. Read yesterday's daily `daily/YYYY-MM-DD.md` — check if OBT-linked task was created (look for OBT substring in tasks logged)
+4. Count N = consecutive days without OBT-linked task
+5. If N ≥ 2 — create Todoist task:
+
+```bash
+mcp-cli call todoist add-tasks '{"tasks": [{"content": "Слот для OBT: {one_big_thing}", "dueString": "tomorrow", "priority": 2}]}'
+```
+
+Record created task ID under `obt_slot_task` in output JSON.
 
 ## mcp-cli retry algorithm
 
@@ -142,6 +158,7 @@ Print ONLY valid JSON:
   "observations": [],
   "pattern_tasks_created": [
     {"pattern": "doc-heavy", "content": "Follow-up: ...", "id": "8501234568"}
-  ]
+  ],
+  "obt_slot_task": {"id": "8501234569", "content": "Слот для OBT: ...", "due": "tomorrow"}
 }
 ```
