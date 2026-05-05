@@ -120,6 +120,11 @@ OBT: «{one_big_thing}»
 
 Where `suggested_day` = closest upcoming weekday with low workload (from execute.json workload map).
 
+**Если `sick_day == true` в capture.json:** заменить блок ⚠️ overdue-алерта в разделе Process goals на:
+```html
+<i>overdue (день болезни — перенесено на следующий рабочий день)</i>
+```
+
 ### 6. Update agent_notes.md
 
 Scan all input for signals to improve the agent. Write to `vault/agent/agent_notes.md`.

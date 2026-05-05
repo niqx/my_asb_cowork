@@ -71,6 +71,7 @@ Print ONLY valid JSON (no markdown, no explanation):
       ]
     }
   ],
+  "sick_day": false,
   "stats": {
     "total_entries": 5,
     "tasks": 2,
@@ -110,6 +111,14 @@ After classifying all entries, scan for content signals and populate the `patter
 ### Pattern: doc-heavy
 **Trigger:** 2+ entries of type `[doc]` or `[voice]` that are meeting/call/planning transcriptions (>150 words each, containing: встреча, звонок, обсуждение, demo, planning, решили, договорились, флайт, дедлайн, бюджет)  
 **Action:** Extract 2–4 key decisions/next actions from transcription content  
+**Extraction rules:** Scan transcription text for action phrases and form a concrete task for each match:
+- «получить ок от [имя] по [артефакт]» → task: «Получить ок от [имя] по [артефакт]»
+- «опубликовать [артефакт]» → task: «Опубликовать [артефакт]»
+- «подготовить [артефакт] [для кого]» → task: «Подготовить [артефакт] [для кого]»
+- «отправить [артефакт] [кому]» → task: «Отправить [артефакт] [кому]»
+- «согласовать [артефакт] с [кем]» → task: «Согласовать [артефакт] с [кем]»
+
+Each suggested_task **must** contain: конкретное действие + объект + получатель (если упомянут). ЗАПРЕЩЕНО: «Follow-up по встрече» без конкретики.  
 **Why:** Long transcriptions with product decisions often have no follow-up tasks created from them.
 
 ### Pattern: competitive-gap
@@ -128,7 +137,12 @@ After classifying all entries, scan for content signals and populate the `patter
 **Suggested task:** «Разобрать итоги недели: [тема из записи]», priority=3, due=monday  
 **Why:** Воскресные записи с итогами недели часто не конвертируются в задачу на понедельник.
 
-Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal` | `sunday-review-pending`  
+### Pattern: sick-day
+**Trigger:** Any entry containing keywords: «болею», «болезнь», «температура», «заболел», «плохо себя чувствую»  
+**Action:** Set top-level `sick_day: true` in JSON output  
+**Why:** On sick days, overdue alerts should be softened and overdue tasks auto-rescheduled.
+
+Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal` | `sunday-review-pending` | `sick-day`  
 Only add a pattern if it clearly applies — don't force it. Empty `patterns: []` is fine.
 
 ## Important

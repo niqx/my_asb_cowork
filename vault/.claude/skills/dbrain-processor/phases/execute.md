@@ -105,7 +105,23 @@ mcp-cli call todoist add-tasks '{"tasks": [{"content": "Follow-up: ...", "priori
 
 Add created task IDs to output under `pattern_tasks_created`. Skip if `patterns` is empty or missing.
 
-### 7. OBT escalation (N≥2)
+### 7. Sick-day: reschedule overdue process-goal tasks
+
+**Если `sick_day == true` в capture.json:**
+
+1. Найти все overdue задачи с лейблом `process-goal`:
+```bash
+mcp-cli call todoist find-tasks '{"labels": ["process-goal"]}'
+```
+2. Для каждой задачи с просроченной датой — перенести на следующий будний день:
+```bash
+mcp-cli call todoist update-tasks '{"tasks": [{"id": "TASK_ID", "dueString": "next monday"}]}'
+```
+(используй ближайший будний день, не обязательно понедельник)
+
+Record rescheduled task IDs under `sick_day_rescheduled` in output JSON. Skip this step if `sick_day` is false or missing.
+
+### 8. OBT escalation (N≥2)
 
 **Logic:**
 1. Read `one_big_thing` from `.session/capture.json`
