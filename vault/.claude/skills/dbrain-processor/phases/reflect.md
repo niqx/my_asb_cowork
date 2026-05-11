@@ -125,6 +125,20 @@ Where `suggested_day` = closest upcoming weekday with low workload (from execute
 <i>overdue (день болезни — перенесено на следующий рабочий день)</i>
 ```
 
+### No-work-records alert section (add to report if N≥3 consecutive days without work entries):
+
+**Logic:**
+1. Read `categories` from `.session/capture.json` for today
+2. Read `categories` from daily files for the previous 2 days (`daily/YYYY-MM-DD.md`) — check if capture.json was cached, otherwise infer from daily entry types
+3. A day counts as "non-work" if all its entries fall into non-work categories (e.g. `news`, `personal`, `health`, `entertainment`) — i.e. no entries with work categories (`work`, `task`, `idea`, `meeting`, `project`)
+4. Count N = number of consecutive non-work days ending today (today + look back)
+5. If N ≥ 3 — add alert to report:
+
+```html
+<b>🔔 {N} дней без рабочих записей</b>
+→ Предлагаю обновить weekly goal и добавить задачи
+```
+
 ### 6. Update agent_notes.md
 
 Scan all input for signals to improve the agent. Write to `vault/agent/agent_notes.md`.
