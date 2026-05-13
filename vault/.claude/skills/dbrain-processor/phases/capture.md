@@ -142,7 +142,12 @@ Each suggested_task **must** contain: конкретное действие + о
 **Action:** Set top-level `sick_day: true` in JSON output  
 **Why:** On sick days, overdue alerts should be softened and overdue tasks auto-rescheduled.
 
-Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal` | `sunday-review-pending` | `sick-day`  
+### Pattern: life-decision
+**Trigger:** Any entry containing keywords «принял решение», «решено», «окончательно», «закрыт вопрос» AND context from life areas (переезд, работа, отношения, карьера)  
+**Action:** Extract the decision text and the related life area/goal  
+**Why:** Life decisions are high-signal events that should be explicitly captured and linked to relevant goals.
+
+Types: `doc-heavy` | `competitive-gap` | `stale-weekly-goal` | `sunday-review-pending` | `sick-day` | `life-decision`  
 Only add a pattern if it clearly applies — don't force it. Empty `patterns: []` is fine.
 
 ## Important

@@ -93,6 +93,7 @@ Follow the HTML template exactly:
 <b>🔍 Авто-детекция:</b>
 • [doc-heavy] 2 транскрипции встреч → создано 2 follow-up задачи
 • [stale-weekly-goal] 3-weekly.md не менялась 5 дней → добавлена задача обновить цели
+• [life-decision] ✅ Жизненное решение: [решение] — закрывает [[goal]]
 ```
 
 ### Vault Health section (add to report if data exists):
@@ -138,6 +139,34 @@ Where `suggested_day` = closest upcoming weekday with low workload (from execute
 <b>🔔 {N} дней без рабочих записей</b>
 → Предлагаю обновить weekly goal и добавить задачи
 ```
+
+### Process goals escalation section
+
+**Logic:**
+1. Read `process_goals` count from `.session/execute.json` (tasks created with goal type = process)
+2. Read `overdue` count from `.session/execute.json` or `stats` field in `.session/capture.json`
+3. If `overdue > 0` — show task IDs inline and add "Перенести" suggestion:
+
+```html
+<b>🎯 Process goals:</b> {N} выполнено
+⚠️ Просроченные: {overdue} — <code>{id1}, {id2}</code>
+→ <b>Перенести</b> на ближайший рабочий день?
+```
+
+4. Count consecutive days without process goals (process_goals == 0):
+   - Read last daily files (`daily/YYYY-MM-DD.md`) for previous 2 days
+   - Check execute.json cached for those days (or infer from daily log entries)
+   - Count N = consecutive days ending today where process_goals == 0
+5. If N ≥ 3 — add ⚠️ to section header and offer to create process-goal tasks:
+
+```html
+<b>⚠️ 🎯 Process goals:</b> {N}-й день без process-задач
+→ Создать process-goal задачи прямо сейчас?
+• "Обзор процессов недели" (priority 2, due today)
+• "Обновить weekly goal" (priority 3, due today)
+```
+
+**Если `sick_day == true` в capture.json:** не показывать ⚠️ эскалацию, не считать день в счётчик N.
 
 ### 6. Update agent_notes.md
 
