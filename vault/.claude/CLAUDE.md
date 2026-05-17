@@ -89,7 +89,7 @@ Run daily processing via `/process` command or automatically at 21:00.
 
 ### 3-Phase Pipeline:
 1. **CAPTURE** — Read daily/, classify entries → JSON (no MCP)
-2. **EXECUTE** — Create Todoist tasks, save thoughts, build links → JSON (with MCP)
+2. **EXECUTE** — Save tasks to vault/tasks/, save thoughts, build links → JSON (no MCP)
 3. **REFLECT** — Generate HTML report, evolve MEMORY.md, capture observations → HTML (no MCP)
 
 Each phase runs in a fresh Claude context for better quality. Fallback to monolith on capture error.
@@ -181,20 +181,14 @@ When invoked via /do, Claude receives arbitrary user requests. Common patterns:
 - "создай задачу из первой записи сегодня"
 - "перенеси всё с сегодня на завтра"
 
-## Todoist Tools Available
-
-**Via mcp-cli (Bash) — preferred in scripts:**
-```bash
-mcp-cli call todoist <tool-name> '<json-args>'
-```
+## Todoist Tools Available (read-only)
 
 **Via MCP (interactive) — mcp__todoist__*:**
-- `add-tasks` — создать задачи
 - `find-tasks` — найти задачи по тексту
 - `find-tasks-by-date` — задачи за период
-- `update-tasks` — изменить задачи
-- `complete-tasks` — завершить задачи
 - `user-info` — информация о пользователе
+
+ЗАПРЕЩЕНО: `add-tasks`, `complete-tasks`, `update-tasks` — не использовать.
 
 **Filesystem:**
 - Read/write vault files

@@ -26,10 +26,16 @@ NEVER use: `**`, `##`, ` ``` `, `- **`, or any markdown.
 - `=TODAY=` — date and weekday
 - Vault files: MEMORY.md, goals/3-weekly.md, goals/2-monthly.md, daily/*.md
 
-## MCP Tools Required
+## Task Sources
 
-- `mcp__todoist__find-tasks` — get all active tasks
-- `mcp__todoist__find-tasks-by-date` — get tasks due today
+Tasks are stored locally in vault, NOT in Todoist.
+
+**Primary source:** `tasks/` directory — read files for last 7 days, collect open `- [ ]` items.
+
+Overdue = tasks with `due:` date before today.
+Today = tasks with `due:today` or `due:{TODAY}`.
+
+**Todoist** — do NOT read Todoist tasks. Ignore any Todoist MCP tools.
 
 ## News Curation Rules
 
@@ -55,7 +61,7 @@ Show only categories that have **new headlines** in `=AI_NEWS=`. If a category h
 
 1. **Read context** — MEMORY.md, goals/3-weekly.md, goals/2-monthly.md
 2. **Read reflections** — daily/YYYY-MM-DD.md for last 2 days
-3. **Get Todoist tasks** — find-tasks-by-date for today + overdue (find-tasks)
+3. **Get tasks from vault** — read `tasks/` files for last 7 days, collect `- [ ]` items; split into overdue vs today
 4. **Curate news** — group =AI_NEWS= by category, pick 1-2 per group
 5. **Analyze** — what's urgent, what aligns with goals, what's unresolved
 6. **Consider context** — weekday rhythm, weather energy impact
