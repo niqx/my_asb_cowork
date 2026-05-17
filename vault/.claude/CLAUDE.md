@@ -122,39 +122,27 @@ See `.claude/rules/` for format requirements:
 - `goals-format.md` — goals format
 - `telegram-report.md` — HTML report format
 
-## Todoist Access
+## Task Storage (Local — Vault)
 
-**Два способа доступа к Todoist (в порядке приоритета):**
+**Задачи хранятся в vault, НЕ в Todoist.**
 
-1. **mcp-cli** (Bash) — стабильный CLI-прокси, используй в 3-phase pipeline:
-   ```bash
-   mcp-cli call todoist find-tasks-by-date '{"startDate": "today"}'
-   mcp-cli call todoist add-tasks '{"tasks": [{"content": "...", "priority": 2}]}'
-   ```
+Файл задач: `vault/tasks/YYYY-MM-DD.md`
 
-2. **MCP tools** (прямые) — используй при интерактивной работе (/do, /process):
-   - `mcp__todoist__add-tasks`
-   - `mcp__todoist__find-tasks`
-   - `mcp__todoist__find-tasks-by-date`
-   - `mcp__todoist__complete-tasks`
-   - `mcp__todoist__update-tasks`
+Формат:
+```markdown
+# Tasks — YYYY-MM-DD
 
-## CRITICAL: Tool Usage Policy
+- [ ] Задача 1 <!-- p:2 due:tomorrow goal:OBT -->
+- [ ] Задача 2 <!-- p:3 due:this week goal:Career -->
+```
 
-**ТЫ ОБЯЗАН вызывать Todoist — через mcp-cli ИЛИ MCP tools.**
+Статусы: `- [ ]` открыта | `- [x]` выполнена | `- [-]` отменена
 
-ЗАПРЕЩЁННЫЕ ПАТТЕРНЫ (НИКОГДА не делай это):
-- "Todoist недоступен"
-- "mcp-cli не работает"
-- "Добавь вручную: ..."
-- Любые инструкции для ручного выполнения
+**Todoist — только для чтения** (опционально, при явном запросе пользователя):
+- `mcp__todoist__find-tasks-by-date` — посмотреть существующие задачи
+- `mcp__todoist__find-tasks` — поиск задач
 
-ПРАВИЛЬНЫЙ ПАТТЕРН:
-1. Вызвать mcp-cli или MCP tool
-2. Ошибка? Retry 3x с паузами (10 сек, 20 сек)
-3. Включить результат в HTML отчёт
-
-При ошибке — показать ТОЧНУЮ ошибку, не придумывать отговорки.
+**ЗАПРЕЩЕНО создавать задачи в Todoist** через `add-tasks` или mcp-cli `add-tasks`. Все новые задачи — только в vault/tasks/.
 
 ## Report Format
 

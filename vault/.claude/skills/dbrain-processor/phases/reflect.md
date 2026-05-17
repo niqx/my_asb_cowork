@@ -24,8 +24,8 @@ Use the template from SKILL.md. Include:
 
 - ONE Big Thing (from capture.json)
 - Thoughts saved (from execute.json)
-- Tasks created (with IDs)
-- Process goals status
+- Tasks created (list from execute.json, show content + due, NO external IDs)
+- Open tasks count from vault/tasks/ (last 7 days)
 - Workload by day
 - Vault Health score (from latest health-history.json entry, if exists)
 - Top 3 priorities
@@ -42,7 +42,7 @@ Append to `daily/{DATE}.md`:
 d-brain processing
 
 **Tasks created:** N
-- "Task content" (id: XXXX, priority, due)
+- "Task content" (p:{priority}, due:{due})
 
 **Thoughts saved:** M
 - [[path/to/thought|Title]] — category

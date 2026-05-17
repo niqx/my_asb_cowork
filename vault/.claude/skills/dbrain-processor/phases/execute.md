@@ -1,67 +1,64 @@
 ---
 type: note
 title: Phase 2: EXECUTE
-last_accessed: 2026-03-02
-relevance: 0.1
-tier: archive
+last_accessed: 2026-05-17
+relevance: 0.8
+tier: active
 ---
 # Phase 2: EXECUTE
 
-Read capture.json from Phase 1. Create Todoist tasks, save thoughts, build links.
+Read capture.json from Phase 1. Save tasks locally to vault, save thoughts, build links.
 
 ## Input
 - `.session/capture.json` — output from Phase 1
 
-## Todoist via mcp-cli
+## Task Storage
 
-**ALWAYS use mcp-cli for Todoist.** Call via Bash tool.
+**Задачи хранятся в vault/tasks/, НЕ в Todoist.**
+Файл: `tasks/YYYY-MM-DD.md` (создать если не существует)
 
-### Commands:
-
-```bash
-# Today's tasks (check workload)
-mcp-cli call todoist find-tasks-by-date '{"startDate": "today"}'
-
-# Tasks for 7 days
-mcp-cli call todoist find-tasks-by-date '{"startDate": "today", "daysCount": 7}'
-
-# Create task
-mcp-cli call todoist add-tasks '{"tasks": [{"content": "Task", "dueString": "tomorrow", "priority": 2}]}'
-
-# Find tasks by label
-mcp-cli call todoist find-tasks '{"labels": ["process-goal"]}'
-
-# Complete tasks
-mcp-cli call todoist complete-tasks '{"ids": ["task_id"]}'
+Формат строки задачи:
+```
+- [ ] Содержание задачи <!-- p:{priority} due:{due} goal:{goal_alignment} -->
 ```
 
-### Priorities:
-- 1 = p1 (highest)
-- 2 = p2 (high)
-- 3 = p3 (medium)
-- 4 = p4 (default)
+Priorities: 1=критично, 2=высокий, 3=средний, 4=низкий
 
 ## Task
 
-### 1. Create Todoist tasks
+### 1. Save tasks to vault
 
-For each entry with `classification: "task"`:
+For each entry with `classification: "task"`, append to `tasks/{DATE}.md`.
 
-```bash
-mcp-cli call todoist add-tasks '{"tasks": [{"content": "...", "dueString": "...", "priority": N}]}'
+If file doesn't exist, create with header `# Tasks — {DATE}`.
+
+Append:
+```markdown
+- [ ] {task_content} <!-- p:{task_priority} due:{task_due} goal:{goal_alignment} -->
 ```
 
-Record created task IDs.
+Record saved tasks in output JSON as `tasks_created` (with `path` field).
 
-### 2. Check process goals
+### 2. Handle patterns from capture.json
 
-```bash
-mcp-cli call todoist find-tasks '{"labels": ["process-goal"]}'
+For each pattern with `suggested_tasks`, append to `tasks/{DATE}.md`:
+```markdown
+- [ ] {suggested_task_content} <!-- p:{priority} due:{due} pattern:{pattern_type} -->
 ```
 
-If missing or stale → create from goals.
+### 3. OBT escalation (N≥2)
 
-### 3. Save thoughts
+1. Read `one_big_thing` from `.session/capture.json`
+2. Scan `tasks/{DATE}.md` and `tasks/{YESTERDAY}.md` for tasks matching OBT keywords
+3. Count N = consecutive days without OBT-linked task
+4. If N ≥ 2 — append to `tasks/{DATE}.md`:
+```markdown
+- [ ] Слот для OBT: {one_big_thing} <!-- p:2 due:tomorrow obt:escalated -->
+```
+
+Record under `obt_slot_task` in output JSON.
+
+### 4. Save thoughts
 
 For each entry with classification idea/reflection/learning/project:
 - Create file in `thoughts/{category}/YYYY-MM-DD-slug.md`
@@ -73,80 +70,15 @@ For each entry with classification idea/reflection/learning/project:
   - [[thoughts/ideas/some-note|Title]] — context: discussed during processing
   ```
 
-### 4. Build links
+### 5. Build links
 
 For all created/updated files:
 - Search for related notes in vault
 - Add wiki-links with context phrases
 
-### 5. Check workload
+### 6. Check open tasks workload
 
-```bash
-mcp-cli call todoist find-tasks-by-date '{"startDate": "today", "daysCount": 7}'
-```
-
-### 6. Handle patterns from capture.json
-
-Read `patterns` array from capture.json. For each detected pattern, create the suggested_tasks in Todoist:
-
-```bash
-# Example for doc-heavy pattern
-mcp-cli call todoist add-tasks '{"tasks": [{"content": "Follow-up: ...", "priority": 2, "dueString": "tomorrow"}]}'
-```
-
-**Priority and due by pattern type:**
-
-| Pattern type | Priority | Due |
-|---|---|---|
-| `doc-heavy` | 2 (high) | tomorrow |
-| `competitive-gap` | 2 (high) | this week |
-| `stale-weekly-goal` | 3 (medium) | today |
-| `sunday-review-pending` | 3 (medium) | monday |
-
-Add created task IDs to output under `pattern_tasks_created`. Skip if `patterns` is empty or missing.
-
-### 7. Sick-day: reschedule overdue process-goal tasks
-
-**Если `sick_day == true` в capture.json:**
-
-1. Найти все overdue задачи с лейблом `process-goal`:
-```bash
-mcp-cli call todoist find-tasks '{"labels": ["process-goal"]}'
-```
-2. Для каждой задачи с просроченной датой — перенести на следующий будний день:
-```bash
-mcp-cli call todoist update-tasks '{"tasks": [{"id": "TASK_ID", "dueString": "next monday"}]}'
-```
-(используй ближайший будний день, не обязательно понедельник)
-
-Record rescheduled task IDs under `sick_day_rescheduled` in output JSON. Skip this step if `sick_day` is false or missing.
-
-### 8. OBT escalation (N≥2)
-
-**Logic:**
-1. Read `one_big_thing` from `.session/capture.json`
-2. Check `tasks_created` in current execute.json output — any task content matching OBT?
-3. Read yesterday's daily `daily/YYYY-MM-DD.md` — check if OBT-linked task was created (look for OBT substring in tasks logged)
-4. Count N = consecutive days without OBT-linked task
-5. If N ≥ 2 — create Todoist task:
-
-```bash
-mcp-cli call todoist add-tasks '{"tasks": [{"content": "Слот для OBT: {one_big_thing}", "dueString": "tomorrow", "priority": 2}]}'
-```
-
-Record created task ID under `obt_slot_task` in output JSON.
-
-## mcp-cli retry algorithm
-
-```
-1. Call mcp-cli
-2. Error? Wait 10 sec, read vault files
-3. Call again
-4. Error? Wait 20 sec
-5. Third call — GUARANTEED to work
-```
-
-NEVER say "mcp-cli unavailable". Always retry 3x.
+Read `tasks/` files for last 7 days, count open `- [ ]` items per day.
 
 ## Output Format
 
@@ -155,26 +87,22 @@ Print ONLY valid JSON:
 ```json
 {
   "tasks_created": [
-    {"id": "8501234567", "content": "Follow-up task", "priority": 2, "due": "tomorrow"}
+    {"path": "tasks/2026-05-17.md", "content": "Follow-up task", "priority": 2, "due": "tomorrow"}
   ],
   "thoughts_saved": [
-    {"path": "thoughts/ideas/2026-03-02-layered-memory.md", "title": "AI agents need layered memory", "category": "ideas"}
+    {"path": "thoughts/ideas/2026-05-17-layered-memory.md", "title": "AI agents need layered memory", "category": "ideas"}
   ],
   "links_created": [
-    {"from": "thoughts/ideas/2026-03-02-layered-memory.md", "to": "goals/3-weekly.md", "context": "supports weekly focus"}
+    {"from": "thoughts/ideas/2026-05-17-layered-memory.md", "to": "goals/3-weekly.md", "context": "supports weekly focus"}
   ],
-  "process_goals": {
-    "active": 5,
-    "overdue": 1,
-    "created": 0
-  },
   "workload": {
-    "mon": 3, "tue": 2, "wed": 4, "thu": 1, "fri": 2, "sat": 0, "sun": 0
+    "open_tasks_7d": 12,
+    "by_day": {"2026-05-17": 3, "2026-05-16": 5}
   },
   "observations": [],
   "pattern_tasks_created": [
-    {"pattern": "doc-heavy", "content": "Follow-up: ...", "id": "8501234568"}
+    {"pattern": "doc-heavy", "content": "Follow-up: ...", "path": "tasks/2026-05-17.md"}
   ],
-  "obt_slot_task": {"id": "8501234569", "content": "Слот для OBT: ...", "due": "tomorrow"}
+  "obt_slot_task": {"path": "tasks/2026-05-17.md", "content": "Слот для OBT: ...", "due": "tomorrow"}
 }
 ```
