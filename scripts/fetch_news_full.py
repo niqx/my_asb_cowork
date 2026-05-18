@@ -56,7 +56,7 @@ def fetch_article(url: str) -> str:
 
 
 def generate_summary(title: str, text: str) -> tuple[str, str]:
-    """Return (title_ru, summary) — Russian title + 3-5 bullet points via haiku."""
+    """Return (title_ru, summary) — Russian title + 1-2 sentence summary via haiku."""
     if not text:
         # No article text — translate title only
         title_ru = run_haiku(
@@ -65,25 +65,23 @@ def generate_summary(title: str, text: str) -> tuple[str, str]:
         ) or ""
         return title_ru, ""
     prompt = (
-        "Переведи заголовок на русский и выдели 3-5 ключевых мыслей из статьи.\n"
+        "Переведи заголовок на русский и напиши краткое изложение статьи в 1-2 предложения.\n"
         "Формат (строго соблюдай):\n"
         "ЗАГОЛОВОК: <перевод заголовка>\n"
-        "• ключевая мысль 1\n"
-        "• ключевая мысль 2\n"
-        "• ключевая мысль 3\n\n"
+        "КРАТКО: <1-2 предложения сути статьи на русском>\n\n"
         f"Заголовок: {title}\n\n{text[:15000]}"
     )
     result = run_haiku(prompt, timeout=60)
     if not result:
         return "", ""
     title_ru = ""
-    bullets: list[str] = []
+    summary = ""
     for line in result.strip().splitlines():
         if line.startswith("ЗАГОЛОВОК:"):
             title_ru = line.replace("ЗАГОЛОВОК:", "").strip()
-        elif line.startswith(("•", "-", "*")):
-            bullets.append(line)
-    return title_ru, "\n".join(bullets)
+        elif line.startswith("КРАТКО:"):
+            summary = line.replace("КРАТКО:", "").strip()
+    return title_ru, summary
 
 
 def generate_agent_note(title: str, text: str, source: str) -> str | None:

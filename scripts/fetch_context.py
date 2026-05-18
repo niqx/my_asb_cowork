@@ -28,14 +28,7 @@ AI_SOURCES = [
     ("RATA-news",    "https://ratanews.ru/rss.xml"),
     ("RTourNews",    "https://rtournews.ru/rss"),
     # Telegram channels via self-hosted RSSHub (localhost:1200)
-    ("TG:fckrasnodar",          "http://localhost:1200/telegram/channel/fckrasnodar"),
-    ("TG:myachPRO",             "http://localhost:1200/telegram/channel/myachPRO"),
-    ("TG:ChessMaestro",         "http://localhost:1200/telegram/channel/ChessMaestro"),
-    ("TG:Wylsared",             "http://localhost:1200/telegram/channel/Wylsared"),
-    ("TG:ai_ml_big_data",       "http://localhost:1200/telegram/channel/ai_machinelearning_big_data"),
-    ("TG:cdo_club",             "http://localhost:1200/telegram/channel/cdo_club"),
-    ("TG:leadgr",               "http://localhost:1200/telegram/channel/leadgr"),
-    ("TG:travelstartups",       "http://localhost:1200/telegram/channel/travelstartups"),
+    ("TG:travelstartups",            "http://localhost:1200/telegram/channel/travelstartups"),
 ]
 
 

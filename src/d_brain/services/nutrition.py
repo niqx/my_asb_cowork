@@ -11,8 +11,26 @@ from datetime import date, datetime
 from typing import Any
 
 import anthropic
+import httpx
 
 logger = logging.getLogger(__name__)
+
+_NUTRITIONIX_API_URL = "https://trackapi.nutritionix.com/v2/natural/nutrients"
+
+_IDENTIFY_FOODS_PROMPT = """Ты распознаёшь еду на фото. Перечисли все блюда и продукты с оценкой порции.
+
+Ответь ТОЛЬКО валидным JSON:
+{
+  "foods": [
+    {"name_ru": "название на русском", "name_en": "english name", "portion": "количество с единицей (г, мл, шт, cup)"}
+  ]
+}
+
+Правила:
+- Будь конкретным: не "мясо", а "куриная грудка жареная"
+- Для сложных блюд (суп, салат, паста) — укажи блюдо целиком, не разбивай
+- Порцию оценивай реалистично по видимому размеру на тарелке/в посуде
+- Если видно несколько блюд — каждое отдельным элементом"""
 
 # ── КБЖУ targets — configured via NUTRITION_* env vars (see .env.example)
 # Defaults: Mifflin-St Jeor 80kg/175cm/30y/male, PAL 1.4, deficit ~500 kcal
@@ -97,10 +115,14 @@ class NutritionService:
         daily_protein: float = _DEFAULT_PROTEIN,
         daily_fat: float = _DEFAULT_FAT,
         daily_carbs: float = _DEFAULT_CARBS,
+        nutritionix_app_id: str = "",
+        nutritionix_app_key: str = "",
     ) -> None:
         self._claude = anthropic.AsyncAnthropic(api_key=anthropic_api_key or None)
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
+        self._nutritionix_app_id = nutritionix_app_id
+        self._nutritionix_app_key = nutritionix_app_key
         self._daily_kcal = daily_kcal
         self._daily_protein = daily_protein
         self._daily_fat = daily_fat
@@ -178,6 +200,134 @@ class NutritionService:
         texts: list[str],
         oura_steps: int,
     ) -> MealAnalysis:
+        if self._nutritionix_app_id and self._nutritionix_app_key and photo_bytes_list:
+            try:
+                return await self._call_claude_with_nutritionix(photo_bytes_list, texts, oura_steps)
+            except Exception as exc:
+                logger.warning("Nutritionix pipeline failed (%s), falling back to direct Claude", exc)
+        return await self._call_claude_direct(photo_bytes_list, texts, oura_steps)
+
+    async def _identify_foods_claude(self, photo_bytes_list: list[bytes], texts: list[str]) -> list[dict[str, str]]:
+        """Step 1: ask Claude to identify food items and portions (no КБЖУ calculation)."""
+        content: list[Any] = []
+        for photo_bytes in photo_bytes_list:
+            b64 = base64.standard_b64encode(photo_bytes).decode()
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+            })
+        user_hint = ""
+        if texts:
+            user_hint = "\n\nПользователь добавил: " + " ".join(texts)
+        content.append({"type": "text", "text": _IDENTIFY_FOODS_PROMPT + user_hint})
+
+        response = await self._claude.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=512,
+            messages=[{"role": "user", "content": content}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+        return data.get("foods", [])
+
+    async def _lookup_nutritionix(self, foods: list[dict[str, str]]) -> dict[str, Any]:
+        """Step 2: query Nutritionix for КБЖУ by food items."""
+        query = ", ".join(
+            f"{item['portion']} {item['name_en']}" for item in foods
+        )
+        headers = {
+            "x-app-id": self._nutritionix_app_id,
+            "x-app-key": self._nutritionix_app_key,
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                _NUTRITIONIX_API_URL,
+                headers=headers,
+                json={"query": query},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def _call_claude_with_nutritionix(
+        self,
+        photo_bytes_list: list[bytes],
+        texts: list[str],
+        oura_steps: int,
+    ) -> MealAnalysis:
+        """Two-stage pipeline: Claude identifies foods → Nutritionix КБЖУ → Claude comments."""
+        foods = await self._identify_foods_claude(photo_bytes_list, texts)
+        if not foods:
+            return await self._call_claude_direct(photo_bytes_list, texts, oura_steps)
+
+        nx_data = await self._lookup_nutritionix(foods)
+        nx_foods = nx_data.get("foods", [])
+
+        # Build verified nutrition context
+        lines = []
+        total_kcal = total_protein = total_fat = total_carbs = total_fiber = 0.0
+        for item in nx_foods:
+            kcal = item.get("nf_calories") or 0
+            protein = item.get("nf_protein") or 0
+            fat = item.get("nf_total_fat") or 0
+            carbs = item.get("nf_total_carbohydrate") or 0
+            fiber = item.get("nf_dietary_fiber") or 0
+            serving = f"{item.get('serving_qty', '')} {item.get('serving_unit', '')}".strip()
+            lines.append(
+                f"- {item.get('food_name', '?')} ({serving}): "
+                f"{kcal:.0f} ккал, Б {protein:.1f}г, Ж {fat:.1f}г, У {carbs:.1f}г"
+            )
+            total_kcal += kcal
+            total_protein += protein
+            total_fat += fat
+            total_carbs += carbs
+            total_fiber += fiber
+
+        nutrition_block = "\n".join(lines)
+        nutrition_block += (
+            f"\n\nИтого из базы Nutritionix: {total_kcal:.0f} ккал | "
+            f"Б {total_protein:.1f}г | Ж {total_fat:.1f}г | У {total_carbs:.1f}г"
+        )
+
+        # Final Claude call: validate + commentary
+        content: list[Any] = []
+        for photo_bytes in photo_bytes_list:
+            b64 = base64.standard_b64encode(photo_bytes).decode()
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+            })
+
+        text_parts = [
+            f"Данные о питательности из базы Nutritionix:\n{nutrition_block}",
+            "Сверь эти данные с фото (скорректируй порции при необходимости, отклонение ±20% допустимо). "
+            "Ответь JSON с итоговыми КБЖУ и своим комментарием.",
+        ]
+        if texts:
+            text_parts.insert(1, "Описание от пользователя:\n" + "\n".join(texts))
+        if oura_steps:
+            text_parts.append(f"Данные активности сегодня: {oura_steps} шагов.")
+        content.append({"type": "text", "text": "\n\n".join(text_parts)})
+
+        response = await self._claude.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            system=self._system_prompt,
+            messages=[{"role": "user", "content": content}],
+        )
+        return self._parse_meal_analysis(response.content[0].text)
+
+    async def _call_claude_direct(
+        self,
+        photo_bytes_list: list[bytes],
+        texts: list[str],
+        oura_steps: int,
+    ) -> MealAnalysis:
+        """Fallback: single-pass Claude analysis without Nutritionix."""
         content: list[Any] = []
 
         for photo_bytes in photo_bytes_list:
@@ -201,8 +351,11 @@ class NutritionService:
             system=self._system_prompt,
             messages=[{"role": "user", "content": content}],
         )
+        return self._parse_meal_analysis(response.content[0].text)
 
-        raw = response.content[0].text.strip()
+    @staticmethod
+    def _parse_meal_analysis(raw: str) -> MealAnalysis:
+        raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -432,4 +585,6 @@ def get_nutrition_service() -> NutritionService:
         daily_protein=s.nutrition_daily_protein,
         daily_fat=s.nutrition_daily_fat,
         daily_carbs=s.nutrition_daily_carbs,
+        nutritionix_app_id=s.nutritionix_app_id,
+        nutritionix_app_key=s.nutritionix_app_key,
     )

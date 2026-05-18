@@ -347,13 +347,32 @@ pathlib.Path(path).write_text(content, encoding='utf-8')
 $WHAT"
             log "[$IDX] Done: $WHAT"
         else
-            # Leave [→] as-is — will retry next night
             FAILED=$((FAILED+1))
             WHY=$(echo "$RESULT_LINE" | sed 's/^SKIP: //')
-            send_telegram_silent "⏭ <b>[$IDX/$ITEM_COUNT] Пропущено:</b> $ITEM_TITLE
+            # Detect permanent failures (file missing, spec invalid) — no point retrying
+            IS_PERMANENT=$(echo "$WHY" | grep -iE 'не найден|не существует|не указан|not found|does not exist|слишком размыт|vague' | wc -l)
+            if [ "$IS_PERMANENT" -gt 0 ]; then
+                # Update [→] → [x] to stop retrying
+                for ID in $ITEM_IDS; do
+                    python3 -c "
+import re, pathlib
+path = '$NOTES_FILE'
+content = pathlib.Path(path).read_text(encoding='utf-8')
+note_id = '$ID'
+content = re.sub(r'\`\[→\]\`(.*?<!-- id: ' + re.escape(note_id) + r' -->)', r'\`[x]\`\1', content)
+pathlib.Path(path).write_text(content, encoding='utf-8')
+" 2>/dev/null || true
+                done
+                send_telegram_silent "⏭ <b>[$IDX/$ITEM_COUNT] Пропущено навсегда:</b> $ITEM_TITLE
+Причина: $WHY"
+                log "[$IDX] Skipped permanently: $WHY"
+            else
+                # Transient error — leave [→] as-is, retry next night
+                send_telegram_silent "⏭ <b>[$IDX/$ITEM_COUNT] Пропущено:</b> $ITEM_TITLE
 Причина: $WHY
 Попробую снова следующей ночью."
-            log "[$IDX] Skipped: $WHY"
+                log "[$IDX] Skipped (will retry): $WHY"
+            fi
         fi
     fi
 done

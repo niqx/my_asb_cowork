@@ -85,6 +85,8 @@ class Settings(BaseSettings):
         default=True,
         description="Enable nutrition tracking (🍽 Еда button, КБЖУ analysis, Supabase logging)",
     )
+    nutritionix_app_id: str = Field(default="", description="Nutritionix App ID (food recognition + КБЖУ database)")
+    nutritionix_app_key: str = Field(default="", description="Nutritionix App Key (food recognition + КБЖУ database)")
 
     @property
     def daily_path(self) -> Path:
