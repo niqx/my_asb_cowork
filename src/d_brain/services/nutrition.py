@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -15,7 +16,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_NUTRITIONIX_API_URL = "https://trackapi.nutritionix.com/v2/natural/nutrients"
+_FATSECRET_TOKEN_URL = "https://oauth.fatsecret.com/connect/token"
+_FATSECRET_NLP_URL = "https://platform.fatsecret.com/rest/natural/nutrients/v1"
+_FATSECRET_IMAGE_URL = "https://platform.fatsecret.com/rest/image-recognition/v1"
 
 _IDENTIFY_FOODS_PROMPT = """Ты распознаёшь еду на фото. Перечисли все блюда и продукты с оценкой порции.
 
@@ -115,14 +118,16 @@ class NutritionService:
         daily_protein: float = _DEFAULT_PROTEIN,
         daily_fat: float = _DEFAULT_FAT,
         daily_carbs: float = _DEFAULT_CARBS,
-        nutritionix_app_id: str = "",
-        nutritionix_app_key: str = "",
+        fatsecret_client_id: str = "",
+        fatsecret_client_secret: str = "",
     ) -> None:
         self._claude = anthropic.AsyncAnthropic(api_key=anthropic_api_key or None)
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
-        self._nutritionix_app_id = nutritionix_app_id
-        self._nutritionix_app_key = nutritionix_app_key
+        self._fatsecret_client_id = fatsecret_client_id
+        self._fatsecret_client_secret = fatsecret_client_secret
+        self._fatsecret_token: str = ""
+        self._fatsecret_token_expires: float = 0.0
         self._daily_kcal = daily_kcal
         self._daily_protein = daily_protein
         self._daily_fat = daily_fat
@@ -200,15 +205,18 @@ class NutritionService:
         texts: list[str],
         oura_steps: int,
     ) -> MealAnalysis:
-        if self._nutritionix_app_id and self._nutritionix_app_key and photo_bytes_list:
+        if self._fatsecret_client_id and self._fatsecret_client_secret:
             try:
-                return await self._call_claude_with_nutritionix(photo_bytes_list, texts, oura_steps)
+                if photo_bytes_list:
+                    return await self._call_with_fatsecret_image(photo_bytes_list, texts, oura_steps)
+                else:
+                    return await self._call_with_fatsecret_nlp(texts, oura_steps)
             except Exception as exc:
-                logger.warning("Nutritionix pipeline failed (%s), falling back to direct Claude", exc)
+                logger.warning("FatSecret pipeline failed (%s), falling back to direct Claude", exc)
         return await self._call_claude_direct(photo_bytes_list, texts, oura_steps)
 
     async def _identify_foods_claude(self, photo_bytes_list: list[bytes], texts: list[str]) -> list[dict[str, str]]:
-        """Step 1: ask Claude to identify food items and portions (no КБЖУ calculation)."""
+        """Ask Claude to identify food items and portions (no КБЖУ calculation)."""
         content: list[Any] = []
         for photo_bytes in photo_bytes_list:
             b64 = base64.standard_b64encode(photo_bytes).decode()
@@ -234,66 +242,140 @@ class NutritionService:
         data = json.loads(raw)
         return data.get("foods", [])
 
-    async def _lookup_nutritionix(self, foods: list[dict[str, str]]) -> dict[str, Any]:
-        """Step 2: query Nutritionix for КБЖУ by food items."""
-        query = ", ".join(
-            f"{item['portion']} {item['name_en']}" for item in foods
-        )
-        headers = {
-            "x-app-id": self._nutritionix_app_id,
-            "x-app-key": self._nutritionix_app_key,
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=15.0) as client:
+    async def _get_fatsecret_token(self) -> str:
+        """Get OAuth2 Bearer token from FatSecret, caching until expiry."""
+        if self._fatsecret_token and time.monotonic() < self._fatsecret_token_expires:
+            return self._fatsecret_token
+        credentials = base64.standard_b64encode(
+            f"{self._fatsecret_client_id}:{self._fatsecret_client_secret}".encode()
+        ).decode()
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
-                _NUTRITIONIX_API_URL,
-                headers=headers,
-                json={"query": query},
+                _FATSECRET_TOKEN_URL,
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                content="grant_type=client_credentials&scope=premier",
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+        self._fatsecret_token = data["access_token"]
+        self._fatsecret_token_expires = time.monotonic() + data.get("expires_in", 86400) - 60
+        return self._fatsecret_token
 
-    async def _call_claude_with_nutritionix(
+    async def _call_with_fatsecret_image(
         self,
         photo_bytes_list: list[bytes],
         texts: list[str],
         oura_steps: int,
     ) -> MealAnalysis:
-        """Two-stage pipeline: Claude identifies foods → Nutritionix КБЖУ → Claude comments."""
-        foods = await self._identify_foods_claude(photo_bytes_list, texts)
-        if not foods:
+        """Photo pipeline: FatSecret Image Recognition → КБЖУ → Claude commentary."""
+        token = await self._get_fatsecret_token()
+        photo_b64 = base64.standard_b64encode(photo_bytes_list[0]).decode()
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                _FATSECRET_IMAGE_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                json={"image_b64": photo_b64},
+            )
+            resp.raise_for_status()
+            fs_data = resp.json()
+
+        food_response = fs_data.get("food_response", [])
+        if isinstance(food_response, dict):
+            food_response = [food_response]
+        if not food_response:
             return await self._call_claude_direct(photo_bytes_list, texts, oura_steps)
 
-        nx_data = await self._lookup_nutritionix(foods)
-        nx_foods = nx_data.get("foods", [])
-
-        # Build verified nutrition context
         lines = []
-        total_kcal = total_protein = total_fat = total_carbs = total_fiber = 0.0
-        for item in nx_foods:
-            kcal = item.get("nf_calories") or 0
-            protein = item.get("nf_protein") or 0
-            fat = item.get("nf_total_fat") or 0
-            carbs = item.get("nf_total_carbohydrate") or 0
-            fiber = item.get("nf_dietary_fiber") or 0
-            serving = f"{item.get('serving_qty', '')} {item.get('serving_unit', '')}".strip()
-            lines.append(
-                f"- {item.get('food_name', '?')} ({serving}): "
-                f"{kcal:.0f} ккал, Б {protein:.1f}г, Ж {fat:.1f}г, У {carbs:.1f}г"
-            )
+        total_kcal = total_protein = total_fat = total_carbs = 0.0
+        for item in food_response:
+            name = item.get("name", "?")
+            eaten = item.get("eaten", {})
+            kcal = float(eaten.get("calories", 0))
+            protein = float(eaten.get("protein", 0))
+            fat = float(eaten.get("fat", 0))
+            carbs = float(eaten.get("carbohydrate", 0))
+            serving = eaten.get("standard_serving_size", "")
+            lines.append(f"- {name} ({serving}): {kcal:.0f} ккал, Б {protein:.1f}г, Ж {fat:.1f}г, У {carbs:.1f}г")
             total_kcal += kcal
             total_protein += protein
             total_fat += fat
             total_carbs += carbs
-            total_fiber += fiber
 
         nutrition_block = "\n".join(lines)
         nutrition_block += (
-            f"\n\nИтого из базы Nutritionix: {total_kcal:.0f} ккал | "
+            f"\n\nИтого из FatSecret Image Recognition: {total_kcal:.0f} ккал | "
             f"Б {total_protein:.1f}г | Ж {total_fat:.1f}г | У {total_carbs:.1f}г"
         )
+        return await self._call_claude_validate(photo_bytes_list, texts, oura_steps, nutrition_block)
 
-        # Final Claude call: validate + commentary
+    async def _call_with_fatsecret_nlp(
+        self,
+        texts: list[str],
+        oura_steps: int,
+    ) -> MealAnalysis:
+        """Text pipeline: Claude identifies foods (EN) → FatSecret NLP → Claude commentary."""
+        foods = await self._identify_foods_claude([], texts)
+        if not foods:
+            return await self._call_claude_direct([], texts, oura_steps)
+
+        query = ", ".join(f"{item['portion']} {item['name_en']}" for item in foods)
+        token = await self._get_fatsecret_token()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                _FATSECRET_NLP_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                json={"user_input": query},
+            )
+            resp.raise_for_status()
+            fs_data = resp.json()
+
+        foods_data = fs_data.get("foods", {})
+        food_list = foods_data.get("food", [])
+        if isinstance(food_list, dict):
+            food_list = [food_list]
+        if not food_list:
+            return await self._call_claude_direct([], texts, oura_steps)
+
+        lines = []
+        total_kcal = total_protein = total_fat = total_carbs = 0.0
+        for item in food_list:
+            kcal = float(item.get("calories", 0))
+            protein = float(item.get("protein", 0))
+            fat = float(item.get("fat", 0))
+            carbs = float(item.get("carbohydrate", 0))
+            serving = item.get("serving_description", item.get("metric_serving_amount", ""))
+            name = item.get("food_name", "?")
+            lines.append(f"- {name} ({serving}): {kcal:.0f} ккал, Б {protein:.1f}г, Ж {fat:.1f}г, У {carbs:.1f}г")
+            total_kcal += kcal
+            total_protein += protein
+            total_fat += fat
+            total_carbs += carbs
+
+        totals = foods_data.get("total_nutritional_contents", {})
+        if totals:
+            total_kcal = float(totals.get("calories", total_kcal))
+            total_protein = float(totals.get("protein", total_protein))
+            total_fat = float(totals.get("fat", total_fat))
+            total_carbs = float(totals.get("carbohydrate", total_carbs))
+
+        nutrition_block = "\n".join(lines)
+        nutrition_block += (
+            f"\n\nИтого из FatSecret NLP: {total_kcal:.0f} ккал | "
+            f"Б {total_protein:.1f}г | Ж {total_fat:.1f}г | У {total_carbs:.1f}г"
+        )
+        return await self._call_claude_validate([], texts, oura_steps, nutrition_block)
+
+    async def _call_claude_validate(
+        self,
+        photo_bytes_list: list[bytes],
+        texts: list[str],
+        oura_steps: int,
+        nutrition_block: str,
+    ) -> MealAnalysis:
+        """Final Claude call: validate FatSecret data + add commentary."""
         content: list[Any] = []
         for photo_bytes in photo_bytes_list:
             b64 = base64.standard_b64encode(photo_bytes).decode()
@@ -303,8 +385,8 @@ class NutritionService:
             })
 
         text_parts = [
-            f"Данные о питательности из базы Nutritionix:\n{nutrition_block}",
-            "Сверь эти данные с фото (скорректируй порции при необходимости, отклонение ±20% допустимо). "
+            f"Данные о питательности из базы FatSecret:\n{nutrition_block}",
+            "Сверь эти данные с фото/описанием (скорректируй порции при необходимости, отклонение ±20% допустимо). "
             "Ответь JSON с итоговыми КБЖУ и своим комментарием.",
         ]
         if texts:
@@ -585,6 +667,6 @@ def get_nutrition_service() -> NutritionService:
         daily_protein=s.nutrition_daily_protein,
         daily_fat=s.nutrition_daily_fat,
         daily_carbs=s.nutrition_daily_carbs,
-        nutritionix_app_id=s.nutritionix_app_id,
-        nutritionix_app_key=s.nutritionix_app_key,
+        fatsecret_client_id=s.fatsecret_client_id,
+        fatsecret_client_secret=s.fatsecret_client_secret,
     )

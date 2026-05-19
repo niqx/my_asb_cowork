@@ -39,26 +39,24 @@ async def cmd_news(message: Message) -> None:
         return
 
     date_str = data.get("date", "сегодня")
-    lines = [f"📰 <b>Новости — {date_str}</b>\n"]
+    lines = [f"📰 <b>Новости — {date_str}</b>"]
 
+    # Group by source, preserve original order of first appearance
+    from collections import defaultdict, OrderedDict
+    by_source: dict = OrderedDict()
     for art in articles:
-        title = art.get("title_ru") or art.get("title", "Без названия")
-        source = art.get("source", "")
-        url = art.get("url", "")
-        summary = art.get("summary", "")
+        src = art.get("source", "—")
+        by_source.setdefault(src, []).append(art)
 
-        if url:
-            line = f'• <a href="{url}">{title}</a>'
-        else:
-            line = f"• {title}"
-
-        if source:
-            line += f" <i>({source})</i>"
-
-        if summary:
-            line += f"\n  {summary}"
-
-        lines.append(line)
+    for source, arts in by_source.items():
+        lines.append(f"\n<b>{source}</b>")
+        for art in arts[:2]:
+            title = art.get("title_ru") or art.get("title", "Без названия")
+            url = art.get("url", "")
+            if url:
+                lines.append(f'• <a href="{url}">{title}</a>')
+            else:
+                lines.append(f"• {title}")
 
     text = "\n".join(lines)
 
