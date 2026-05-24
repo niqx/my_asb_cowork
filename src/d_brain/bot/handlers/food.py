@@ -7,14 +7,12 @@ Flow:
   [✅ Записал всё]    → process session → show КБЖУ analysis
   [❌ Отмена]         → cancel session → return to main keyboard
   10-min timeout      → auto-process whatever was collected
-  /weight <value>     → log body weight (available anywhere in food mode or as standalone command)
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import datetime
 
 from aiogram import Bot, F, Router
@@ -157,38 +155,6 @@ async def food_cancel(message: Message, state: FSMContext) -> None:
     await message.answer("Отменено.", reply_markup=get_main_keyboard())
 
 
-# ────────────────────────── /weight command ──────────────────────────
-
-@router.message(Command("weight"))
-async def cmd_weight(message: Message) -> None:
-    """Log body weight. Usage: /weight 92.5"""
-    if not message.from_user or not message.text:
-        return
-    settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_key:
-        await message.answer("Supabase не настроен. Добавь SUPABASE_URL и SUPABASE_KEY в .env")
-        return
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("Использование: /weight 92.5")
-        return
-    raw = parts[1].replace(",", ".")
-    m = re.match(r"(\d+(?:\.\d+)?)", raw)
-    if not m:
-        await message.answer("Не распознал число. Пример: /weight 92.5")
-        return
-    weight_kg = float(m.group(1))
-    note = " ".join(parts[2:]) if len(parts) > 2 else ""
-    try:
-        from d_brain.services.nutrition import get_nutrition_service
-        svc = get_nutrition_service()
-        await svc.log_weight(message.from_user.id, weight_kg, note)
-        await message.answer(f"⚖️ Вес записан: <b>{weight_kg} кг</b>")
-    except Exception as e:
-        logger.exception("Weight log error")
-        await message.answer(f"Ошибка: {e}")
-
-
 # ────────────────────────── processing ──────────────────────────
 
 async def _process_food_session(
@@ -231,25 +197,13 @@ async def _process_food_session(
             logger.exception("Failed to download food photo %s", item["file_id"])
 
     settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_key:
-        await bot.edit_message_text(
-            "⚠️ Supabase не настроен. Добавь SUPABASE_URL и SUPABASE_KEY в .env",
-            chat_id=chat_id,
-            message_id=processing_msg.message_id,
-        )
-        await state.clear()
-        await bot.send_message(chat_id, "Сессия закрыта.", reply_markup=get_main_keyboard())
-        return
-
     try:
         from d_brain.services.nutrition import get_nutrition_service
         svc = get_nutrition_service()
         analysis = await svc.analyze_meal(
-            user_id=user_id,
             photo_bytes_list=photo_bytes_list,
             texts=texts,
         )
-        progress = await svc.get_today_progress(user_id)
     except Exception as e:
         logger.exception("Nutrition analysis error")
         await bot.edit_message_text(
@@ -268,7 +222,7 @@ async def _process_food_session(
 
     # Build result message
     emoji = _MEAL_TYPE_EMOJI.get(analysis.meal_type, "🍽")
-    report = _format_analysis(emoji, analysis, progress)
+    report = _format_analysis(emoji, analysis)
 
     await bot.edit_message_text(
         report,
@@ -276,7 +230,7 @@ async def _process_food_session(
         message_id=processing_msg.message_id,
         parse_mode="HTML",
     )
-    await bot.send_message(chat_id, "✅ Записано в базу.", reply_markup=get_main_keyboard())
+    await bot.send_message(chat_id, "✅ Записано.", reply_markup=get_main_keyboard())
 
 
 def _write_meal_to_vault(settings: "Settings", analysis: "MealAnalysis", user_id: int) -> None:  # type: ignore[name-defined]
@@ -303,38 +257,16 @@ def _write_meal_to_vault(settings: "Settings", analysis: "MealAnalysis", user_id
         logger.exception("Failed to write meal to vault")
 
 
-def _format_analysis(emoji: str, a: "MealAnalysis", progress: dict) -> str:  # type: ignore[name-defined]
-    kcal_total = progress.get("total_calories", 0)
-    kcal_goal = progress.get("goal_calories", 2000)
-    prot_total = progress.get("total_protein", 0)
-    fat_total = progress.get("total_fat", 0)
-    carb_total = progress.get("total_carbs", 0)
-
-    kcal_bar = _bar(kcal_total, kcal_goal)
-    kcal_left = max(0, kcal_goal - kcal_total)
-
+def _format_analysis(emoji: str, a: "MealAnalysis") -> str:  # type: ignore[name-defined]
     return (
         f"{emoji} <b>{a.meal_type.capitalize()}</b>\n"
         f"{a.description}\n\n"
-        f"<b>КБЖУ этого приёма:</b>\n"
+        f"<b>КБЖУ:</b>\n"
         f"  Калории: <b>{a.calories}</b> ккал\n"
         f"  Белки: <b>{a.protein}</b> г  |  Жиры: <b>{a.fat}</b> г  |  Углеводы: <b>{a.carbs}</b> г\n\n"
-        f"<b>За сегодня ({kcal_bar}):</b>\n"
-        f"  {kcal_total} / {kcal_goal} ккал  (осталось <b>{kcal_left}</b>)\n"
-        f"  Б: {prot_total}г  Ж: {fat_total}г  У: {carb_total}г\n\n"
         f"<i>{a.comment}</i>\n\n"
         f"💡 <b>Совет:</b> {a.recommendation}"
     )
-
-
-def _bar(value: float, goal: float, width: int = 10) -> str:
-    """Simple ASCII progress bar."""
-    if goal <= 0:
-        return "░" * width
-    filled = min(int(round(value / goal * width)), width)
-    over = value > goal
-    char = "█" if not over else "▓"
-    return char * filled + "░" * (width - filled)
 
 
 # ────────────────────────── timeout helpers ──────────────────────────

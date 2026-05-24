@@ -50,7 +50,8 @@ async def cmd_news(message: Message) -> None:
 
     for source, arts in by_source.items():
         lines.append(f"\n<b>{source}</b>")
-        for art in arts[:2]:
+        top = sorted(arts, key=lambda a: a.get("score", 5), reverse=True)[:2]
+        for art in top:
             title = art.get("title_ru") or art.get("title", "Без названия")
             url = art.get("url", "")
             if url:

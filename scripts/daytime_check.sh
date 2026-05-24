@@ -38,6 +38,23 @@ if [ -f "$VAULT_DIR/goals/3-weekly.md" ]; then
     WEEKLY_GOALS=$(head -40 "$VAULT_DIR/goals/3-weekly.md")
 fi
 
+# Fetch Oura activity for today (steps, calories, movement goal)
+OURA_ACTIVITY=""
+if [ "${HEALTH_ENABLED:-false}" = "true" ]; then
+    OURA_ACTIVITY=$(claude --print --dangerously-skip-permissions --model claude-haiku-4-5-20251001 \
+        --mcp-config "$PROJECT_DIR/mcp-config.json" \
+        -p "Call oura_get_daily_activity with start_date='$TODAY' end_date='$TODAY'. Return ONE line in Russian: шаги, active calories, distance, % от цели активности. Example: Активность: 6 420 шагов, 340 ккал, 4.8 км, цель 72%. Return ONLY that line, nothing else." \
+        2>&1) || OURA_ACTIVITY=""
+    OURA_ACTIVITY=$(echo "$OURA_ACTIVITY" | grep -v '^$' | grep -v 'Here is\|Let me\|Calling\|I will\|Вот' | head -3 || echo "$OURA_ACTIVITY")
+fi
+
+ACTIVITY_SECTION=""
+if [ -n "$OURA_ACTIVITY" ]; then
+    ACTIVITY_SECTION="
+=== АКТИВНОСТЬ (OURA) ===
+${OURA_ACTIVITY}"
+fi
+
 REPORT=$(claude --print --dangerously-skip-permissions --model claude-haiku-4-5-20251001 \
     --mcp-config "$PROJECT_DIR/mcp-config.json" \
     -p "Ты — персональный ассистент d-brain. Сейчас ${CURRENT_HOUR} MSK, ${TODAY} (${WEEKDAY}).
@@ -50,19 +67,20 @@ ${TASKS_CONTENT:-[нет задач]}
 
 === ЦЕЛИ НЕДЕЛИ ===
 ${WEEKLY_GOALS:-[не загружены]}
-
+${ACTIVITY_SECTION}
 === ЗАДАЧА ===
 Сделай короткий (3-5 предложений) дневной чек-ин:
 1. Оцени как идёт день исходя из записей и задач
 2. Дай 1-2 конкретных совета или запроса — что стоит сделать прямо сейчас
 3. Если есть незакрытые задачи или просроченные — мягко напомни
 4. Учитывай время дня: утро — мотивация/приоритеты, середина — фокус, вечер — подведение
+5. Если есть данные активности — добавь одну строку: сколько шагов и % от цели; если цель < 50% и время > 16:00 — мягко подтолкни к прогулке
 
 CRITICAL OUTPUT FORMAT:
 - Return ONLY raw HTML for Telegram (parse_mode=HTML)
-- NO markdown, NO ```, NO explanations
+- NO markdown, NO code blocks, NO explanations
 - Allowed tags: <b>, <i>, <code>
-- Start with time emoji + <b>Чек-ин {CURRENT_HOUR}</b>
+- Start with time emoji + <b>Чек-ин ${CURRENT_HOUR}</b>
 - Max 10 строк — Telegram краткость важна" \
     2>&1) || true
 

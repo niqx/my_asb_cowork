@@ -55,33 +55,51 @@ def fetch_article(url: str) -> str:
         return ""
 
 
-def generate_summary(title: str, text: str) -> tuple[str, str]:
-    """Return (title_ru, summary) — Russian title + 1-2 sentence summary via haiku."""
+_USER_PROFILE = (
+    "Пользователь: руководитель аналитики Т-Путешествий (команда 20 человек, руководитель руководителей, 2+ года). "
+    "Интересуется новостями тревел-рынка, стартапами в туризме, аналитикой и данными в индустрии. "
+    "Активно развивается в темах Second Brain и AI-агентов, следит за AI-инструментами для личной продуктивности. "
+    "Рассматривает варианты удалённой работы. "
+    "В свободное время: спортивная мафия, настольный теннис, компьютерные игры."
+)
+
+
+def generate_summary(title: str, text: str) -> tuple[str, str, int]:
+    """Return (title_ru, summary, score) — Russian title, 1-2 sentence summary, relevance 1-10."""
     if not text:
-        # No article text — translate title only
+        # No article text — translate title only, score 5 as default
         title_ru = run_haiku(
             f"Переведи заголовок новости на русский язык. Верни только перевод, без кавычек:\n{title}",
             timeout=20,
         ) or ""
-        return title_ru, ""
+        return title_ru, "", 5
     prompt = (
-        "Переведи заголовок на русский и напиши краткое изложение статьи в 1-2 предложения.\n"
-        "Формат (строго соблюдай):\n"
+        f"{_USER_PROFILE}\n\n"
+        "Переведи заголовок на русский, напиши краткое изложение и оцени важность статьи для пользователя.\n"
+        "Формат (строго соблюдай, каждое поле на отдельной строке):\n"
         "ЗАГОЛОВОК: <перевод заголовка>\n"
-        "КРАТКО: <1-2 предложения сути статьи на русском>\n\n"
+        "КРАТКО: <1-2 предложения сути статьи на русском>\n"
+        "ВАЖНОСТЬ: <целое число от 1 до 10, где 10 — максимально важно для пользователя>\n\n"
         f"Заголовок: {title}\n\n{text[:15000]}"
     )
     result = run_haiku(prompt, timeout=60)
     if not result:
-        return "", ""
+        return "", "", 5
     title_ru = ""
     summary = ""
+    score = 5
     for line in result.strip().splitlines():
         if line.startswith("ЗАГОЛОВОК:"):
             title_ru = line.replace("ЗАГОЛОВОК:", "").strip()
         elif line.startswith("КРАТКО:"):
             summary = line.replace("КРАТКО:", "").strip()
-    return title_ru, summary
+        elif line.startswith("ВАЖНОСТЬ:"):
+            raw = line.replace("ВАЖНОСТЬ:", "").strip()
+            try:
+                score = max(1, min(10, int(raw.split()[0])))
+            except (ValueError, IndexError):
+                score = 5
+    return title_ru, summary, score
 
 
 def generate_agent_note(title: str, text: str, source: str) -> str | None:
@@ -215,8 +233,8 @@ def main() -> None:
         source = art.get("source", "")
         print(f"[fetch_news] → {title[:70]}", file=sys.stderr)
 
-        text                  = fetch_article(url)
-        title_ru, summary     = generate_summary(title, text)
+        text                        = fetch_article(url)
+        title_ru, summary, score    = generate_summary(title, text)
 
         enriched.append({
             "source":   source,
@@ -225,6 +243,7 @@ def main() -> None:
             "url":      url,
             "text":     text[:50000] if text else "",
             "summary":  summary,
+            "score":    score,
         })
 
     # Write morning-news.json (without full text to keep it small)
