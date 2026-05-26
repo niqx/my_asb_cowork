@@ -13,6 +13,8 @@ fi
 
 YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
 WEEKDAY=$(LC_TIME=ru_RU.UTF-8 date -d "yesterday" +%A 2>/dev/null || date -d "yesterday" +%A)
+# Oura API uses exclusive end_date: [start_date, end_date), so end must be > start
+OURA_END=$(date +%Y-%m-%d)
 
 echo "=== Health check for $YESTERDAY (yesterday) ==="
 
@@ -49,7 +51,7 @@ REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6
     -p "Yesterday was $YESTERDAY ($WEEKDAY). It is now 00:30 night. Generate an END-OF-DAY HEALTH SUMMARY for YESTERDAY.
 
 === INSTRUCTIONS ===
-1. Call Oura MCP tools to get YESTERDAY's data (pass start_date='$YESTERDAY' and end_date='$YESTERDAY' to each):
+1. Call Oura MCP tools to get YESTERDAY's data using start_date='$YESTERDAY' and end_date='$OURA_END' (Oura uses exclusive end_date, so end_date must be today, NOT yesterday):
    - oura_get_daily_sleep (last night's sleep score, duration, efficiency)
    - oura_get_daily_stress (full day stress timeline)
    - oura_get_heartrate (resting HR, daily trends)
@@ -65,7 +67,9 @@ Generate a Telegram message in HTML. NOT a data dump — an insightful end-of-da
 
 <b>Ночь:</b> One sentence verdict — good/bad sleep, recovered or not. Mention numbers only if something is unusual.
 
-<b>День:</b> Stress and activity summary. Correlate stress peaks with what happened today (from daily notes). Steps vs goal.
+<b>День:</b> Stress summary — when was peak stress and what happened then (from daily notes).
+
+<b>🏃 Активность:</b> Steps vs goal (goal = 8000), active calories, distance. One sentence verdict — enough movement or sedentary day? If high activity minutes > 60, note it.
 
 <b>🍽 Питание:</b> ALWAYS include this block. Show: total calories vs goal, key macros status (protein/fat/carbs). One sentence on how nutrition correlated with energy and stress today.
 

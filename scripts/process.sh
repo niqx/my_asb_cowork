@@ -160,7 +160,8 @@ mcp-cli may take 10-30 sec on first call (server startup). Retry 3x on error." \
     OURA_CONTEXT=""
     if [ "${HEALTH_ENABLED:-false}" = "true" ]; then
         echo "=== Fetching Oura health context ==="
-        OURA_PROMPT="Today is $TODAY. Call ALL of the following Oura MCP tools with start_date='$TODAY' and end_date='$TODAY', then return a compact plain text summary in Russian (no HTML, no markdown):
+        OURA_TOMORROW=$(date -d "tomorrow" +%Y-%m-%d)
+        OURA_PROMPT="Today is $TODAY. Call ALL of the following Oura MCP tools with start_date='$TODAY' and end_date='$OURA_TOMORROW' (Oura uses exclusive end_date, so end must be tomorrow to get today's data), then return a compact plain text summary in Russian (no HTML, no markdown):
 1. oura_get_daily_sleep — ночной сон: score, duration, efficiency, deep/REM/light breakdown
 2. oura_get_daily_stress — stress level timeline over the day, peak stress moments
 3. oura_get_heartrate — resting HR, any notable spikes or drops

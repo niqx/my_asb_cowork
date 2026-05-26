@@ -78,8 +78,14 @@ if [ -n "$GIT_SYNC_WARNING" ]; then
     send_telegram "$GIT_SYNC_WARNING"
 fi
 
+# Send ranked news digest (best article per source, sorted by relevance score)
+NEWS_DIGEST=$(python3 "$PROJECT_DIR/scripts/rank_news.py" 2>/dev/null) || true
+if [ -n "$NEWS_DIGEST" ]; then
+    send_telegram "$NEWS_DIGEST"
+fi
+
 # Send news button (separate message so user can open /news in one tap)
-send_telegram_button "📰 Утренние новости готовы" "📰 Открыть новости" "cmd:news"
+send_telegram_button "📰 Все новости с деталями" "📰 Открыть полный список" "cmd:news"
 
 # Sync vault to git (for Obsidian)
 git add vault/ && git commit -m "chore: morning briefing $TODAY" || true

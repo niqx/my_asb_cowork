@@ -68,10 +68,13 @@ def generate_summary(title: str, text: str) -> tuple[str, str, int]:
     """Return (title_ru, summary, score) — Russian title, 1-2 sentence summary, relevance 1-10."""
     if not text:
         # No article text — translate title only, score 5 as default
-        title_ru = run_haiku(
-            f"Переведи заголовок новости на русский язык. Верни только перевод, без кавычек:\n{title}",
+        raw = run_haiku(
+            f"Translate this news headline to Russian. Return ONLY the translated headline, one line, no quotes, no explanation:\n{title}",
             timeout=20,
         ) or ""
+        # Reject multi-line responses (model gave explanation instead of translation)
+        first_line = raw.strip().splitlines()[0].strip() if raw.strip() else ""
+        title_ru = first_line if first_line else ""
         return title_ru, "", 5
     prompt = (
         f"{_USER_PROFILE}\n\n"
