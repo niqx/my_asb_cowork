@@ -1,9 +1,9 @@
 ---
 type: note
-description: Generates a personalized morning briefing with task recommendations based on Todoist tasks, recent reflections, goals, weather and AI news.
-last_accessed: 2026-02-26
-relevance: 0.1
-tier: archive
+description: Generates a personalized morning briefing with task recommendations based on Todoist tasks, recent reflections, goals and weather. News is sent separately.
+last_accessed: 2026-05-31
+relevance: 0.9
+tier: active
 name: morning-briefer
 ---
 
@@ -22,50 +22,26 @@ NEVER use: `**`, `##`, ` ``` `, `- **`, or any markdown.
 ## Input Context (provided in prompt)
 
 - `=WEATHER=` — weather at user's current location (city name is included at the start of the line)
-- `=AI_NEWS=` — raw headlines from all configured sources (TechCrunch, Meduza, Sports.ru, туризм, TG-каналы)
 - `=TODAY=` — date and weekday
 - Vault files: MEMORY.md, goals/3-weekly.md, goals/2-monthly.md, daily/*.md
 
 ## Task Sources
 
-Tasks are stored locally in vault, NOT in Todoist.
+Tasks are stored in **Todoist**. Use MCP tools to fetch them.
 
-**Primary source:** `tasks/` directory — read files for last 7 days, collect open `- [ ]` items.
+- `mcp__todoist__find-tasks-by-date` — today's tasks
+- `mcp__todoist__find-tasks` with filter `overdue` — overdue tasks
 
-Overdue = tasks with `due:` date before today.
-Today = tasks with `due:today` or `due:{TODAY}`.
-
-**Todoist** — do NOT read Todoist tasks. Ignore any Todoist MCP tools.
-
-## News Curation Rules
-
-From the raw `=AI_NEWS=` headlines, group by category and select **1-2 items per group**:
-
-### Categories:
-- **🤖 AI** — TechCrunch, TG:ai_ml_big_data, TG:Wylsared, TG:cdo_club, TG:leadgr, TG:travelstartups
-- **🌍 Мир** — Meduza
-- **⚽ Спорт** — Sports.ru, TG:fckrasnodar, TG:myachPRO, TG:chtddd, TG:eshkinkrot
-- **✈️ Туризм** — Profi.Travel, Tourdom.ru, RATA-news, Tourinfo.ru
-- **📱 Разное** — TG:ChessMaestro, прочие TG-каналы
-
-### EXCLUDE — user explicitly doesn't want:
-- War details, military operations
-- Crypto, NFT, blockchain
-
-### Format each news item as:
-`• <b>[Source]</b> {short summary in Russian, 1 sentence}`
-
-Show only categories that have **new headlines** in `=AI_NEWS=`. If a category has no items — skip it entirely. Don't invent or hallucinate headlines.
+Split results into: overdue vs today. Highlight by priority (p1 > p2 > p3).
 
 ## Algorithm
 
 1. **Read context** — MEMORY.md, goals/3-weekly.md, goals/2-monthly.md
 2. **Read reflections** — daily/YYYY-MM-DD.md for last 2 days
-3. **Get tasks from vault** — read `tasks/` files for last 7 days, collect `- [ ]` items; split into overdue vs today
-4. **Curate news** — group =AI_NEWS= by category, pick 1-2 per group
-5. **Analyze** — what's urgent, what aligns with goals, what's unresolved
-6. **Consider context** — weekday rhythm, weather energy impact
-7. **Generate briefing** — see template below
+3. **Get tasks** — call `mcp__todoist__find-tasks-by-date` for today + `mcp__todoist__find-tasks` for overdue
+4. **Analyze** — what's urgent, what aligns with goals, what's unresolved
+5. **Consider context** — weekday rhythm, weather energy impact
+6. **Generate briefing** — see template below
 
 ## Weekday Logic
 
@@ -81,19 +57,6 @@ Show only categories that have **new headlines** in `=AI_NEWS=`. If a category h
 <b>☀️ Доброе утро! {weekday}, {date}</b>
 
 <b>🌤 {city from =WEATHER= line}:</b> {weather + 1 sentence energy tip based on weather}
-
-<b>📰 Новости:</b>
-
-<b>🤖 AI</b>
-• <b>[Source]</b> {summary}
-
-<b>🌍 Мир</b>
-• <b>[Source]</b> {summary}
-
-<b>⚽ Спорт</b>
-• <b>[Source]</b> {summary}
-
-(показывай только те категории, по которым есть заголовки в =AI_NEWS=)
 
 <b>🎯 Фокус дня</b>
 {1-2 sentences: what to concentrate on today, based on goals + weekday + reflections}
