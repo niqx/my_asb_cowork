@@ -82,6 +82,9 @@ for pattern in [
 ]:
     text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
+# Strip HTML tags
+text = re.sub(r"<[^>]+>", "", text).strip()
+
 print(text)
 '
 }

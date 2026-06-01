@@ -24,8 +24,10 @@ trap '
 ' EXIT
 
 # Fetch weather + news
-CONTEXT=$(python3 "$PROJECT_DIR/scripts/fetch_context.py" 2>/dev/null) || CONTEXT="=WEATHER=\nнедоступно\n=AI_NEWS=\nнедоступно"
+CONTEXT=$(python3 "$PROJECT_DIR/scripts/fetch_context.py" 2>/dev/null) || CONTEXT="=WEATHER=\nнедоступно"
 CURRENT_CITY="${LOCATION_CITY:-Москва}"
+# Strip =AI_NEWS= section — news is sent separately after the briefing
+CONTEXT_WEATHER=$(echo "$CONTEXT" | sed '/^=AI_NEWS=$/,$d')
 # Fetch full article content + summaries in background (completes during Claude run)
 "$PROJECT_DIR/.venv/bin/python3" "$PROJECT_DIR/scripts/fetch_news_full.py" 2>>"$PROJECT_DIR/logs/fetch_news.log" &
 NEWS_PID=$!
@@ -55,13 +57,14 @@ REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6
 Today is $TODAY ($WEEKDAY). Generate morning briefing according to morning-briefer skill.
 
 === CONTEXT FOR TODAY ===
-$CONTEXT
+$CONTEXT_WEATHER
 
 === INSTRUCTIONS ===
+Follow morning-briefer skill. Steps:
 1. Read MEMORY.md, goals/3-weekly.md, goals/2-monthly.md
 2. Read daily logs for last 2 days
-3. Call mcp__todoist__find-tasks-by-date for today
-4. Call mcp__todoist__find-tasks to get overdue tasks
+3. Call mcp__todoist__find-tasks-by-date for today's tasks
+4. Call mcp__todoist__find-tasks with filter "overdue" for overdue tasks
 5. Generate HTML briefing using morning-briefer skill template
 
 CRITICAL: Return RAW HTML only. No markdown. No explanations." \

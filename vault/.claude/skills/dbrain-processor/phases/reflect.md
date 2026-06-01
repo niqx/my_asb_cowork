@@ -168,7 +168,31 @@ Where `suggested_day` = closest upcoming weekday with low workload (from execute
 
 **Если `sick_day == true` в capture.json:** не показывать ⚠️ эскалацию, не считать день в счётчик N.
 
-### 6. Update agent_notes.md
+### 6. Адаптация тона отчёта по типу дня
+
+**Правило 1 — Выходной день (суббота или воскресенье):**
+Определи день недели по дате из `.session/capture.json` (поле `date`).
+Если день — суббота (`weekday == 5`) или воскресенье (`weekday == 6`):
+- Убрать из отчёта task-секции: «Tasks created», «Open tasks», «Process goals», «OBT-alert»
+- Добавить в конец отчёта блок восстановления:
+
+```html
+<b>🌿 Выходной день</b>
+Хорошего отдыха! На этой неделе: <i>{краткий итог из capture.json}</i>
+→ В понедельник: <b>{первый приоритет из goals/3-weekly.md}</b>
+```
+
+**Правило 2 — Воскресный отчёт с weekly review:**
+Если день — воскресенье И в capture.json или daily есть записи с типом `weekly review` / `итоги недели` (ключевые слова: «итоги недели», «weekly review», «неделя завершена»):
+- Определи номер недели N (ISO week number от даты)
+- Добавить метку в заголовок отчёта: `W{N} ✅ завершена`
+
+Пример заголовка:
+```html
+<b>📋 d-brain отчёт — {DATE} · W{N} ✅ завершена</b>
+```
+
+### 7. Update agent_notes.md
 
 Scan all input for signals to improve the agent. Write to `vault/agent/agent_notes.md`.
 

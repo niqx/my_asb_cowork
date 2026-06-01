@@ -77,10 +77,9 @@ ${ACTIVITY_SECTION}
 5. Если есть данные активности — добавь одну строку: сколько шагов и % от цели; если цель < 50% и время > 16:00 — мягко подтолкни к прогулке
 
 CRITICAL OUTPUT FORMAT:
-- Return ONLY raw HTML for Telegram (parse_mode=HTML)
-- NO markdown, NO code blocks, NO explanations
-- Allowed tags: <b>, <i>, <code>
-- Start with time emoji + <b>Чек-ин ${CURRENT_HOUR}</b>
+- Return ONLY plain text, NO HTML tags, NO markdown, NO code blocks, NO explanations
+- Use emojis for emphasis instead of formatting tags
+- Start with: ☀️ Чек-ин ${CURRENT_HOUR}
 - Max 10 строк — Telegram краткость важна" \
     2>&1) || true
 
