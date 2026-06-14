@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetch weather (open-meteo) and AI news from multiple sources for morning briefing."""
-import json, os, sys, time, urllib.request, urllib.error, xml.etree.ElementTree as ET
+import json, os, sys, urllib.request, urllib.error, xml.etree.ElementTree as ET
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
@@ -23,12 +23,17 @@ WMO = {
 }
 
 AI_SOURCES = [
+    ("HuggingFace",  "https://huggingface.co/blog/feed.xml"),
+    ("VentureBeat",  "https://venturebeat.com/category/ai/feed/"),
+    ("OpenAI",       "https://openai.com/blog/rss.xml"),
     ("TechCrunch",   "https://techcrunch.com/category/artificial-intelligence/feed/"),
-    ("Sports.ru",    "https://www.sports.ru/rss/main.xml"),
-    ("RATA-news",    "https://ratanews.ru/rss.xml"),
-    ("RTourNews",    "https://rtournews.ru/rss"),
-    # Telegram channels via self-hosted RSSHub (localhost:1200)
-    ("TG:travelstartups",            "http://localhost:1200/telegram/channel/travelstartups"),
+]
+
+SKIP_KEYWORDS = [
+    "war", "ukraine", "russia", "military", "soldier",
+    "missile", "nato", "trump", "congress", "senate", "election", "politics",
+    "prison", "arrest", "murder", "shooting", "crypto", "bitcoin", "nft",
+    "lawsuit", "court", "stock", "ipo", "acquisition",
 ]
 
 
@@ -95,83 +100,53 @@ def _precip_type(wcode: int) -> str:
 
 # ── Weather ────────────────────────────────────────────────────────────────
 
-def _get_weather_openmeteo(lat, lon, tz, city):
-    url = ("https://api.open-meteo.com/v1/forecast"
-           f"?latitude={lat}&longitude={lon}"
-           "&current_weather=true"
-           "&hourly=precipitation_probability,apparent_temperature,weathercode"
-           f"&timezone={tz}&forecast_days=1")
-    d = None
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(url, timeout=15) as r:
-                d = json.load(r)
-            break
-        except Exception as e:
-            if attempt < 2:
-                time.sleep(5)
-            else:
-                raise
-    cw = d["current_weather"]
-    desc = WMO.get(cw["weathercode"], f"код {cw['weathercode']}")
-    temp = cw["temperature"]
-    wind = cw["windspeed"]
-    hour = datetime.now().hour
-
-    feels_arr = d["hourly"].get("apparent_temperature", [])
-    precip_arr = d["hourly"].get("precipitation_probability", [])
-    hourly_wcodes = d["hourly"].get("weathercode", [])
-
-    feels = feels_arr[min(hour, len(feels_arr) - 1)] if feels_arr else None
-    feels_str = f"{feels:+.0f}°C" if isinstance(feels, (int, float)) else "?"
-
-    ranges = _precip_ranges(precip_arr, threshold=40)
-    if ranges:
-        rs, re = ranges[0]
-        range_codes = hourly_wcodes[rs: re + 1] if hourly_wcodes else []
-        dominant = max(range_codes, default=cw["weathercode"])
-        ptype = _precip_type(dominant)
-        parts = []
-        for sh, eh in ranges:
-            if eh >= 23:
-                parts.append(f"с {sh:02d}:00 и дольше суток")
-            else:
-                parts.append(f"с {sh:02d}:00 до {eh + 1:02d}:00")
-        precip_info = f", {ptype} ожидается {', '.join(parts)}"
-    else:
-        precip_info = ""
-
-    return (f"{city}: {desc}, {temp:+.0f}°C (ощущается {feels_str}), "
-            f"ветер {wind:.0f} км/ч{precip_info}")
-
-
-def _get_weather_wttr(lat, lon, city):
-    url = f"https://wttr.in/{lat},{lon}?format=j1"
-    with urllib.request.urlopen(url, timeout=15) as r:
-        d = json.load(r)
-    cc = d["current_condition"][0]
-    temp = int(cc["temp_C"])
-    feels = int(cc["FeelsLikeC"])
-    wind = int(cc["windspeedKmph"])
-    desc_en = cc["weatherDesc"][0]["value"]
-    return (f"{city}: {desc_en}, {temp:+d}°C (ощущается {feels:+d}°C), "
-            f"ветер {wind} км/ч [wttr.in]")
-
-
 def get_weather():
-    lat = os.environ.get("LOCATION_LAT", "55.75")
-    lon = os.environ.get("LOCATION_LON", "37.62")
-    tz = os.environ.get("LOCATION_TZ", "Europe/Moscow")
-    city = os.environ.get("LOCATION_CITY", "Москва")
     try:
-        return _get_weather_openmeteo(lat, lon, tz, city)
-    except Exception as e1:
-        print(f"[fetch_context] open-meteo failed ({e1}), trying wttr.in", file=sys.stderr)
-        try:
-            return _get_weather_wttr(lat, lon, city)
-        except Exception as e2:
-            print(f"[fetch_context] wttr.in also failed: {e2}", file=sys.stderr)
-            return f"погода недоступна ({e1}; {e2})"
+        lat = os.environ.get("LOCATION_LAT", "55.75")
+        lon = os.environ.get("LOCATION_LON", "37.62")
+        tz = os.environ.get("LOCATION_TZ", "Europe/Moscow")
+        city = os.environ.get("LOCATION_CITY", "Москва")
+        url = ("https://api.open-meteo.com/v1/forecast"
+               f"?latitude={lat}&longitude={lon}"
+               "&current_weather=true"
+               "&hourly=precipitation_probability,apparent_temperature,weathercode"
+               f"&timezone={tz}&forecast_days=1")
+        with urllib.request.urlopen(url, timeout=15) as r:
+            d = json.load(r)
+        cw = d["current_weather"]
+        desc = WMO.get(cw["weathercode"], f"код {cw['weathercode']}")
+        temp = cw["temperature"]
+        wind = cw["windspeed"]
+        hour = datetime.now().hour
+
+        feels_arr = d["hourly"].get("apparent_temperature", [])
+        precip_arr = d["hourly"].get("precipitation_probability", [])
+        hourly_wcodes = d["hourly"].get("weathercode", [])
+
+        feels = feels_arr[min(hour, len(feels_arr) - 1)] if feels_arr else None
+        feels_str = f"{feels:+.0f}°C" if isinstance(feels, (int, float)) else "?"
+
+        ranges = _precip_ranges(precip_arr, threshold=40)
+        if ranges:
+            rs, re = ranges[0]
+            range_codes = hourly_wcodes[rs: re + 1] if hourly_wcodes else []
+            dominant = max(range_codes, default=cw["weathercode"])
+            ptype = _precip_type(dominant)
+            parts = []
+            for sh, eh in ranges:
+                if eh >= 23:
+                    parts.append(f"с {sh:02d}:00 и дольше суток")
+                else:
+                    parts.append(f"с {sh:02d}:00 до {eh + 1:02d}:00")
+            precip_info = f", {ptype} ожидается {', '.join(parts)}"
+        else:
+            precip_info = ""
+
+        return (f"{city}: {desc}, {temp:+.0f}°C (ощущается {feels_str}), "
+                f"ветер {wind:.0f} км/ч{precip_info}")
+    except Exception as e:
+        print(f"[fetch_context] weather error: {e}", file=sys.stderr)
+        return f"погода недоступна ({e})"
 
 
 # ── RSS ────────────────────────────────────────────────────────────────────
@@ -187,6 +162,8 @@ def fetch_rss(rss_url: str, count: int = 6) -> list:
             t = item.find("title")
             if t is not None and t.text:
                 title = t.text.strip()
+                if any(kw in title.lower() for kw in SKIP_KEYWORDS):
+                    continue
                 # Extract article URL from <link> or <guid>
                 art_url = ""
                 link_el = item.find("link")
@@ -216,33 +193,19 @@ def get_ai_news() -> list:
         if key not in seen:
             new_articles.append(a)
 
-    # Round-robin by source: 1 article per source (guaranteed coverage)
-    from collections import defaultdict
-    by_source: dict = defaultdict(list)
-    for a in new_articles:
-        by_source[a["source"]].append(a)
-
-    headlines: list = []
-    buckets = [by_source[s] for s, _ in AI_SOURCES if by_source[s]]
-    while buckets:
-        for bucket in buckets:
-            if bucket:
-                headlines.append(bucket.pop(0))
-        buckets = [b for b in buckets if b]
-
-    top = headlines[:20]
+    top = new_articles[:20]
 
     # Persist seen keys
     new_keys = [a["url"] or a["title"] for a in top]
     if new_keys:
         save_seen(new_keys)
 
-    # Save raw headlines for fetch_news_full.py (1 per source = up to 15)
+    # Save raw headlines for fetch_news_full.py
     try:
         _SESSION.mkdir(parents=True, exist_ok=True)
         HEADLINES_PATH.write_text(json.dumps({
             "date": date.today().isoformat(),
-            "articles": top[:15],
+            "articles": top[:8],  # top 8 for full fetch
         }, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         print(f"[fetch_context] save headlines error: {e}", file=sys.stderr)

@@ -24,10 +24,8 @@ trap '
 ' EXIT
 
 # Fetch weather + news
-CONTEXT=$(python3 "$PROJECT_DIR/scripts/fetch_context.py" 2>/dev/null) || CONTEXT="=WEATHER=\nнедоступно"
+CONTEXT=$(python3 "$PROJECT_DIR/scripts/fetch_context.py" 2>/dev/null) || CONTEXT="=WEATHER=\nнедоступно\n=AI_NEWS=\nнедоступно"
 CURRENT_CITY="${LOCATION_CITY:-Москва}"
-# Strip =AI_NEWS= section — news is sent separately after the briefing
-CONTEXT_WEATHER=$(echo "$CONTEXT" | sed '/^=AI_NEWS=$/,$d')
 # Fetch full article content + summaries in background (completes during Claude run)
 "$PROJECT_DIR/.venv/bin/python3" "$PROJECT_DIR/scripts/fetch_news_full.py" 2>>"$PROJECT_DIR/logs/fetch_news.log" &
 NEWS_PID=$!
@@ -50,26 +48,38 @@ if [ "$DIFF_H" -gt 24 ]; then
     GIT_SYNC_WARNING="⚠️ Git sync: последний коммит ${DIFF_DAYS} дней назад"
 fi
 
-cd "$VAULT_DIR"
-REPORT=$(claude --print --dangerously-skip-permissions --model claude-sonnet-4-6 \
-    --mcp-config "$PROJECT_DIR/mcp-config.json" \
-    -p "User's current location: $CURRENT_CITY (timezone: ${LOCATION_TZ:-Europe/Moscow}).
-Today is $TODAY ($WEEKDAY). Generate morning briefing according to morning-briefer skill.
+# ASB v3.0: briefing runs on the persistent interactive session (subscription),
+# not headless `claude -p`. The shell hands weather/news context to the pipeline
+# via .session/morning_context.txt; the prompt lives in d_brain.pipeline.
+mkdir -p "$VAULT_DIR/.session"
+printf '%s' "$CONTEXT" > "$VAULT_DIR/.session/morning_context.txt"
 
-=== CONTEXT FOR TODAY ===
-$CONTEXT_WEATHER
+run_morning() {
+    cd "$PROJECT_DIR" && TODAY="$TODAY" WEEKDAY="$WEEKDAY" \
+        CURRENT_CITY="$CURRENT_CITY" LOCATION_TZ="${LOCATION_TZ:-Europe/Moscow}" \
+        uv run python -m d_brain.pipeline morning 2>>"$PROJECT_DIR/logs/pipeline-morning-$TODAY.log"
+}
 
-=== INSTRUCTIONS ===
-Follow morning-briefer skill. Steps:
-1. Read MEMORY.md, goals/3-weekly.md, goals/2-monthly.md
-2. Read daily logs for last 2 days
-3. Call mcp__todoist__find-tasks-by-date for today's tasks
-4. Call mcp__todoist__find-tasks with filter "overdue" for overdue tasks
-5. Generate HTML briefing using morning-briefer skill template
-
-CRITICAL: Return RAW HTML only. No markdown. No explanations." \
-    2>&1) || true
+# pipeline exits non-zero on a failed turn (e.g. a cold-pane stall, where the
+# first prompt never woke the session). Capture the code instead of swallowing
+# it, and retry once on a fresh invocation — the pane is awake by then so the
+# re-ask lands. Only after a second failure do we fall back, so a raw status
+# line like "session stalled" never reaches Telegram as the "briefing".
+set +e
+REPORT=$(run_morning); RC=$?
+if [ "$RC" -ne 0 ] || [ "${#REPORT}" -lt 60 ]; then
+    echo "WARN: morning pipeline failed (rc=$RC, len=${#REPORT}) — retrying once"
+    sleep 5
+    REPORT=$(run_morning); RC=$?
+fi
+set -e
 cd "$PROJECT_DIR"
+
+if [ "$RC" -ne 0 ] || [ "${#REPORT}" -lt 60 ]; then
+    echo "WARN: morning pipeline failed twice (rc=$RC) — sending fallback card"
+    REPORT="☀️ <b>Доброе утро!</b>
+<i>Утренний брифинг временно недоступен — сессия не ответила. Нажми «✨ Запрос», и я соберу разбор.</i>"
+fi
 
 echo "=== Claude output ==="
 echo "$REPORT"
@@ -81,14 +91,8 @@ if [ -n "$GIT_SYNC_WARNING" ]; then
     send_telegram "$GIT_SYNC_WARNING"
 fi
 
-# Send ranked news digest (best article per source, sorted by relevance score)
-NEWS_DIGEST=$(python3 "$PROJECT_DIR/scripts/rank_news.py" 2>/dev/null) || true
-if [ -n "$NEWS_DIGEST" ]; then
-    send_telegram "$NEWS_DIGEST"
-fi
-
 # Send news button (separate message so user can open /news in one tap)
-send_telegram_button "📰 Все новости с деталями" "📰 Открыть полный список" "cmd:news"
+send_telegram_button "📰 Утренние новости готовы" "📰 Открыть новости" "cmd:news"
 
 # Sync vault to git (for Obsidian)
 git add vault/ && git commit -m "chore: morning briefing $TODAY" || true

@@ -1,4 +1,4 @@
-"""Handler for /news command — show today's news as a compact digest with links."""
+"""Handler for /news command — show today's AI news with summaries."""
 
 import json
 import logging
@@ -6,19 +6,22 @@ from pathlib import Path
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from d_brain.config import get_settings
 
 router = Router(name="news")
 logger = logging.getLogger(__name__)
 
-_MAX_MSG = 4000  # Telegram limit safety margin
+
+class NewsCB(CallbackData, prefix="news"):
+    idx: int  # index in articles list
 
 
 @router.message(Command("news"))
 async def cmd_news(message: Message) -> None:
-    """Handle /news command — display today's news as a digest with links."""
+    """Handle /news command — display today's article cards."""
     settings = get_settings()
     news_path = settings.vault_path / ".session" / "morning-news.json"
 
@@ -39,41 +42,55 @@ async def cmd_news(message: Message) -> None:
         return
 
     date_str = data.get("date", "сегодня")
-    lines = [f"📰 <b>Новости — {date_str}</b>"]
+    await message.answer(f"📰 <b>Новости на {date_str}</b> — {len(articles)} статей")
 
-    # Group by source, preserve original order of first appearance
-    from collections import defaultdict, OrderedDict
-    by_source: dict = OrderedDict()
-    for art in articles:
-        src = art.get("source", "—")
-        by_source.setdefault(src, []).append(art)
+    for i, art in enumerate(articles):
+        title = art.get("title_ru") or art.get("title", "Без названия")
+        source = art.get("source", "")
+        url = art.get("url", "")
 
-    for source, arts in by_source.items():
-        lines.append(f"\n<b>{source}</b>")
-        top = sorted(arts, key=lambda a: a.get("score", 5), reverse=True)[:2]
-        for art in top:
-            title = art.get("title_ru") or art.get("title", "Без названия")
-            url = art.get("url", "")
-            if url:
-                lines.append(f'• <a href="{url}">{title}</a>')
-            else:
-                lines.append(f"• {title}")
+        text = f"<b>{title}</b>"
+        if source:
+            text += f"\n<i>{source}</i>"
 
-    text = "\n".join(lines)
+        buttons = []
+        buttons.append(InlineKeyboardButton(
+            text="📖 Изложение",
+            callback_data=NewsCB(idx=i).pack(),
+        ))
+        if url:
+            buttons.append(InlineKeyboardButton(text="🔗 Оригинал", url=url))
 
-    # Split if over Telegram limit
-    if len(text) <= _MAX_MSG:
-        await message.answer(text)
-    else:
-        # Send in chunks preserving line boundaries
-        header = lines[0]
-        chunk_lines = [header]
-        for line in lines[1:]:
-            candidate = "\n".join(chunk_lines + [line])
-            if len(candidate) > _MAX_MSG:
-                await message.answer("\n".join(chunk_lines))
-                chunk_lines = [line]
-            else:
-                chunk_lines.append(line)
-        if chunk_lines:
-            await message.answer("\n".join(chunk_lines))
+        kb = InlineKeyboardMarkup(inline_keyboard=[buttons])
+        await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(NewsCB.filter())
+async def _on_news_read(query: CallbackQuery, callback_data: NewsCB) -> None:
+    """Handle 'Изложение' button — show article summary."""
+    settings = get_settings()
+    news_path = settings.vault_path / ".session" / "morning-news.json"
+
+    try:
+        data = json.loads(news_path.read_text(encoding="utf-8"))
+        articles = data.get("articles", [])
+        idx = callback_data.idx
+        if idx < 0 or idx >= len(articles):
+            await query.answer("❌ Статья не найдена.")
+            return
+        art = articles[idx]
+    except Exception as e:
+        logger.error("Failed to read article for news callback: %s", e)
+        await query.answer("❌ Ошибка чтения статьи.")
+        return
+
+    title = art.get("title_ru") or art.get("title", "Без названия")
+    summary = art.get("summary") or "_Изложение не готово._"
+    url = art.get("url", "")
+
+    text = f"📰 <b>{title}</b>\n\n{summary}"
+    if url:
+        text += f'\n\n<a href="{url}">Читать оригинал →</a>'
+
+    await query.message.edit_text(text, reply_markup=None)
+    await query.answer()

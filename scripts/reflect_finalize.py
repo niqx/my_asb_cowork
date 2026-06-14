@@ -21,7 +21,6 @@ from aiogram.enums import ParseMode
 
 from d_brain.config import get_settings
 from d_brain.services.reflection import ReflectionService
-from d_brain.services.goals import GoalsService
 from d_brain.services.git import VaultGit
 
 logging.basicConfig(
@@ -34,22 +33,30 @@ DEFAULT_TIMEOUT = 1200  # 20 minutes
 
 
 def finalize_reflection(settings, week: str, reflection_path: Path, summary_path: Path) -> str:
-    """Call Claude to process reflection and append to summary.
+    """Process the weekly reflection through the persistent session and append
+    it to the summary.
+
+    ASB v3.0: runs on the shared interactive session (subscription billing),
+    not headless `claude --print`. Paths are passed ABSOLUTE because the session
+    cwd is the vault, not the project root.
 
     Returns:
         Output string to send to user.
     """
-    mcp_config = settings.vault_path.parent / "mcp-config.json"
+    from d_brain.services.runtime import get_session
+
+    refl_abs = reflection_path.resolve()
+    summ_abs = summary_path.resolve()
 
     prompt = f"""Сегодня я завершаю недельную рефлексию за {week}.
 
 ФАЙЛЫ:
-- Сырые ответы рефлексии: {reflection_path}
-- Недельный дайджест: {summary_path}
+- Сырые ответы рефлексии: {refl_abs}
+- Недельный дайджест: {summ_abs}
 
 ЗАДАЧА:
-1. Прочитай файл рефлексии {reflection_path}
-2. Прочитай недельный дайджест {summary_path}
+1. Прочитай файл рефлексии {refl_abs}
+2. Прочитай недельный дайджест {summ_abs}
 3. Структурируй ответы пользователя по 6 вопросам рефлексии:
    1. Что запомнилось сильнее всего?
    2. Самый успешный день?
@@ -59,7 +66,7 @@ def finalize_reflection(settings, week: str, reflection_path: Path, summary_path
    6. Какого опыта хотелось бы избежать?
 4. Сформулируй 2-3 конкретные рекомендации для следующей недели
    на основе рефлексии и целей из vault/goals/3-weekly.md
-5. ДОЗАПИШИ в конец файла {summary_path} следующий раздел в Markdown формате:
+5. ДОЗАПИШИ в конец файла {summ_abs} следующий раздел в Markdown формате:
 
 ## 🪞 Рефлексия недели
 
@@ -68,51 +75,28 @@ def finalize_reflection(settings, week: str, reflection_path: Path, summary_path
 ### 💡 Рекомендации на следующую неделю
 [2-3 рекомендации]
 
-ДОПОЛНИТЕЛЬНЫЕ ПРОВЕРКИ (выполни перед формированием отчёта):
-6. Если в дайджесте или рефлексии обнаружен паттерн (например, doc-heavy — много транскрипций/документации),
-   добавь в отчёт строку:
-   ✅ Паттерн отработан: [название паттерна] → N задач создано
-7. Если один день недели перегружен в 3x и более задач относительно другого дня,
-   добавь блок:
-   ⚖️ Дисбаланс нагрузки: [день] X задач vs [день] Y задач — рассмотреть перенос
-
 CRITICAL OUTPUT FORMAT:
 - Return ONLY raw HTML for Telegram (parse_mode=HTML)
 - Start with ✅ <b>Рефлексия недели {week} сохранена</b>
 - Кратко перечисли ключевые инсайты (3-5 пунктов)
 - Allowed tags: <b>, <i>, <code>, <s>, <u>"""
 
-    env = os.environ.copy()
-    if settings.todoist_api_key:
-        env["TODOIST_API_KEY"] = settings.todoist_api_key
-
-    result = subprocess.run(
-        [
-            "claude",
-            "--print",
-            "--model", "claude-sonnet-4-6",
-            "--dangerously-skip-permissions",
-            "--mcp-config",
-            str(mcp_config),
-            "-p",
-            prompt,
-        ],
-        cwd=str(settings.vault_path.parent),
-        capture_output=True,
-        text=True,
-        timeout=DEFAULT_TIMEOUT,
-        check=False,
-        env=env,
+    res = get_session(settings).ask(
+        prompt, timeout=DEFAULT_TIMEOUT, request_id="maint-reflect-finalize", wrap=True
     )
-
-    if result.returncode != 0:
-        err = result.stderr or "Claude processing failed"
-        logger.error("Claude failed: %s", err)
-        return f"❌ Ошибка обработки рефлексии: {err[:300]}"
+    if res.status == "logged_out":
+        logger.error("session logged out")
+        return "❌ Рефлексия: Claude разлогинился — нужен вход (/login)"
+    if res.status == "rate_limited":
+        logger.error("subscription rate limited")
+        return "❌ Рефлексия: лимит подписки исчерпан, попробуй позже"
+    if not res.ok:
+        logger.error("session ask failed: %s %s", res.status, res.detail)
+        return f"❌ Ошибка обработки рефлексии: {(res.detail or res.status)[:300]}"
 
     # Clean output using the same logic as processor.py
     import re
-    output = result.stdout.strip()
+    output = (res.reply or "").strip()
     if "\n---\n" in output or output.startswith("---\n"):
         lines = output.split("\n")
         seps = [i for i, ln in enumerate(lines) if ln.strip() == "---"]
@@ -133,143 +117,6 @@ CRITICAL OUTPUT FORMAT:
         r"^Вот HTML для Telegram[:\s]*",
         r"^Вот готовый HTML[:\s]*",
         r"^HTML для Telegram[:\s]*",
-    ]
-    for pattern in preamble_patterns:
-        output = re.sub(pattern, "", output, flags=re.IGNORECASE).strip()
-
-    return output
-
-
-def generate_weekly_goals(settings, week: str, summary_path: Path) -> str:
-    """Call Claude to generate goals for next week and write 3-weekly.md.
-
-    Returns:
-        HTML string to send to user.
-    """
-    import re
-    from datetime import date, timedelta
-
-    today = date.today()
-    days_until_monday = (7 - today.weekday()) % 7 or 7
-    next_monday = today + timedelta(days=days_until_monday)
-    next_sunday = next_monday + timedelta(days=6)
-    year, next_week_num, _ = next_monday.isocalendar()
-    next_week_id = f"{year}-W{next_week_num:02d}"
-
-    mcp_config = settings.vault_path.parent / "mcp-config.json"
-    goals_path = settings.vault_path / "goals" / "3-weekly.md"
-    yearly_path = settings.vault_path / "goals" / "1-yearly-2025.md"
-    monthly_path = settings.vault_path / "goals" / "2-monthly.md"
-
-    prompt = f"""Сегодня {today}. Сформируй план на следующую неделю: {next_week_id} ({next_monday.strftime('%d.%m')}–{next_sunday.strftime('%d.%m.%Y')}).
-
-ФАЙЛЫ:
-- Годовые цели: {yearly_path}
-- Месячные цели: {monthly_path}
-- Рефлексия и рекомендации этой недели: {summary_path}
-- Файл целей (перезаписать): {goals_path}
-
-ЗАДАЧА:
-1. Прочитай все файлы выше
-2. Получи незавершённые важные задачи через mcp__todoist__find-tasks (filter: "overdue | p1 | p2")
-3. Исходя из рефлексии, рекомендаций и месячных целей — определи ONE Big Thing и 3–5 приоритетов
-4. Перезапиши файл {goals_path} строго в этом формате:
-
----
-type: weekly
-updated: {today.isoformat()}
-period: {next_week_id}
----
-
-# Weekly Plan — {next_monday.strftime('%d')}–{next_sunday.strftime('%d')} {next_sunday.strftime('%B %Y')}
-
-## ONE Big Thing
-
-> **If I accomplish nothing else, I will:**
-> **[одно главное намерение на неделю]**
-
----
-
-## Must Do This Week
-
-- [ ] [приоритет 1]
-- [ ] [приоритет 2]
-
----
-
-## Work Context
-
-[2–4 строки о рабочем контексте из рефлексии и месячных целей]
-
----
-
-## Review (fill at end of week)
-
-- Главное достижение:
-- Что не успел:
-- Фокус следующей недели:
-
----
-
-## Links
-
-- [[2-monthly]] — monthly priorities
-- [[1-yearly-2025]] — yearly goals
-
-CRITICAL OUTPUT FORMAT:
-- Return ONLY raw HTML for Telegram (parse_mode=HTML)
-- Start with 🎯 <b>Цели на {next_week_id}</b>
-- Перечисли ONE Big Thing и Must Do списком
-- Заверши строкой: "Отправь правки голосом или текстом, /approve — принять"
-- Allowed tags: <b>, <i>, <code>, <s>, <u>"""
-
-    env = os.environ.copy()
-    if settings.todoist_api_key:
-        env["TODOIST_API_KEY"] = settings.todoist_api_key
-
-    result = subprocess.run(
-        [
-            "claude",
-            "--print",
-            "--model", "claude-sonnet-4-6",
-            "--dangerously-skip-permissions",
-            "--mcp-config",
-            str(mcp_config),
-            "-p",
-            prompt,
-        ],
-        cwd=str(settings.vault_path.parent),
-        capture_output=True,
-        text=True,
-        timeout=DEFAULT_TIMEOUT,
-        check=False,
-        env=env,
-    )
-
-    if result.returncode != 0:
-        err = result.stderr or "Claude processing failed"
-        logger.error("Goals generation failed: %s", err)
-        return f"❌ Ошибка генерации целей: {err[:300]}"
-
-    output = result.stdout.strip()
-    if "\n---\n" in output or output.startswith("---\n"):
-        lines = output.split("\n")
-        seps = [i for i, ln in enumerate(lines) if ln.strip() == "---"]
-        if len(seps) >= 2:
-            output = "\n".join(lines[seps[0] + 1 : seps[-1]]).strip()
-        elif len(seps) == 1:
-            idx = seps[0]
-            before = "\n".join(lines[:idx]).strip()
-            after = "\n".join(lines[idx + 1 :]).strip()
-            if re.match(r"^[📅📊✅❌<🧠📝✨💡🎯🪞]", before):
-                output = before
-            else:
-                output = after
-
-    preamble_patterns = [
-        r"^HTML для Telegram[:\s]*",
-        r"^Вот HTML для Telegram[:\s]*",
-        r"^Вот готовый HTML[:\s]*",
     ]
     for pattern in preamble_patterns:
         output = re.sub(pattern, "", output, flags=re.IGNORECASE).strip()
@@ -302,29 +149,24 @@ async def main() -> None:
     logger.info("Finalizing reflection for week %s", week)
     output = finalize_reflection(settings, week, reflection_path, summary_path)
 
-    # Clear reflection flag
+    # Never send an empty message — Telegram rejects it (this was the recurring
+    # d-brain-reflect.service failure). Fall back to a minimal card.
+    if not output or len(output.strip()) < 20:
+        logger.warning("empty reflection output — sending fallback card")
+        output = (
+            f"🪞 <b>Рефлексия недели {week}</b>\n"
+            f"Обработка завершена, но текст отчёта пуст. "
+            f"Загляни в {summary_path.name}."
+        )
+
+    # Clear flag file
     reflection.clear(week)
     logger.info("Reflection flag cleared.")
-
-    # Generate goals for next week
-    logger.info("Generating weekly goals for next week...")
-    goals_output = generate_weekly_goals(settings, week, summary_path)
-
-    # Start goals review (flag file for bot to collect voice corrections)
-    from datetime import date, timedelta
-    today = date.today()
-    days_until_monday = (7 - today.weekday()) % 7 or 7
-    next_monday = today + timedelta(days=days_until_monday)
-    year, next_week_num, _ = next_monday.isocalendar()
-    next_week_id = f"{year}-W{next_week_num:02d}"
-    goals = GoalsService(settings.vault_path)
-    goals.start(next_week_id)
-    logger.info("Goals review started for week %s", next_week_id)
 
     # Commit to git
     git = VaultGit(settings.vault_path)
     try:
-        git.commit_and_push(f"chore: reflection {week} + goals {next_week_id}")
+        git.commit_and_push(f"chore: reflection {week}")
     except Exception as e:
         logger.warning("Git commit failed: %s", e)
 
@@ -346,17 +188,27 @@ async def main() -> None:
             await bot.send_message(chat_id=user_id, text=output, parse_mode=None)
 
         logger.info("Reflection result sent to user %s", user_id)
-
-        # Send goals message
-        try:
-            await bot.send_message(chat_id=user_id, text=goals_output)
-        except Exception:
-            await bot.send_message(chat_id=user_id, text=goals_output, parse_mode=None)
-
-        logger.info("Goals for %s sent to user %s", next_week_id, user_id)
         print(output)
     finally:
         await bot.session.close()
+
+    # --- trigger cascade goal review ---
+    try:
+        cascade_script = Path(__file__).parent / "cascade_review.py"
+        logger.info("Launching cascade review for week %s", week)
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [sys.executable, str(cascade_script), week],
+            cwd=str(settings.vault_path.parent),
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=False,
+        )
+        if proc.returncode != 0:
+            logger.warning("Cascade review exited with %s: %s", proc.returncode, proc.stderr[:300])
+    except Exception:
+        logger.exception("Cascade review trigger failed")
 
 
 if __name__ == "__main__":

@@ -2,10 +2,10 @@
 # common.sh — shared functions for d-brain scripts
 # Source this file: source "$(dirname "$0")/common.sh"
 
-export HOME="/home/myuser"
+export HOME="/home/niks"
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-PROJECT_DIR="/home/myuser/projects/my_asb_cowork"
+PROJECT_DIR="/home/niks/my_asb"
 VAULT_DIR="$PROJECT_DIR/vault"
 ENV_FILE="$PROJECT_DIR/.env"
 
@@ -81,9 +81,6 @@ for pattern in [
     r"^All files updated[.!\s]*(?:Here is[^:\n]*:)?\s*",
 ]:
     text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
-
-# Strip HTML tags
-text = re.sub(r"<[^>]+>", "", text).strip()
 
 print(text)
 '

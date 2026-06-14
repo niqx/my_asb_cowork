@@ -21,18 +21,26 @@ MORNING_NEWS    = _SESSION / "morning-news.json"
 AGENT_NOTES     = _AGENT   / "agent_notes.md"
 
 TODAY        = date.today().isoformat()
-MAX_ARTICLES = 15  # max articles to fully fetch (1 per source)
+MAX_ARTICLES = 5   # max articles to fully fetch
 
 
-# ── Claude haiku subprocess ────────────────────────────────────────────────
+# ── Summary generation via the persistent session ──────────────────────────
 
-def run_haiku(prompt: str, timeout: int = 60) -> str:
+def run_haiku(prompt: str, timeout: int = 120) -> str:
+    """Generate a short summary through the shared interactive session.
+
+    ASB v3.0: subscription billing — NOT headless `claude --print` haiku (which
+    bills the Agent SDK credit from 15.06). The session model (Opus) handles
+    these fine. Best-effort: empty string on any failure so the morning news
+    step never crashes. The function name is kept for call-site compatibility.
+    """
     try:
-        r = subprocess.run(
-            ["claude", "--print", "--model", "claude-haiku-4-5-20251001", "-p", prompt],
-            capture_output=True, text=True, timeout=timeout, check=False,
+        from d_brain.config import get_settings
+        from d_brain.services.runtime import get_session
+        res = get_session(get_settings()).ask(
+            prompt, timeout=float(timeout), request_id="maint-news", wrap=True
         )
-        return r.stdout.strip() if r.returncode == 0 else ""
+        return (res.reply or "").strip() if res.ok else ""
     except Exception:
         return ""
 
@@ -55,54 +63,35 @@ def fetch_article(url: str) -> str:
         return ""
 
 
-_USER_PROFILE = (
-    "Пользователь: руководитель аналитики Т-Путешествий (команда 20 человек, руководитель руководителей, 2+ года). "
-    "Интересуется новостями тревел-рынка, стартапами в туризме, аналитикой и данными в индустрии. "
-    "Активно развивается в темах Second Brain и AI-агентов, следит за AI-инструментами для личной продуктивности. "
-    "Рассматривает варианты удалённой работы. "
-    "В свободное время: спортивная мафия, настольный теннис, компьютерные игры."
-)
-
-
-def generate_summary(title: str, text: str) -> tuple[str, str, int]:
-    """Return (title_ru, summary, score) — Russian title, 1-2 sentence summary, relevance 1-10."""
+def generate_summary(title: str, text: str) -> tuple[str, str]:
+    """Return (title_ru, summary) — Russian title + 3-5 bullet points via haiku."""
     if not text:
-        # No article text — translate title only, score 5 as default
-        raw = run_haiku(
-            f"Translate this news headline to Russian. Return ONLY the translated headline, one line, no quotes, no explanation:\n{title}",
+        # No article text — translate title only
+        title_ru = run_haiku(
+            f"Переведи заголовок новости на русский язык. Верни только перевод, без кавычек:\n{title}",
             timeout=20,
         ) or ""
-        # Reject multi-line responses (model gave explanation instead of translation)
-        first_line = raw.strip().splitlines()[0].strip() if raw.strip() else ""
-        title_ru = first_line if first_line else ""
-        return title_ru, "", 5
+        return title_ru, ""
     prompt = (
-        f"{_USER_PROFILE}\n\n"
-        "Переведи заголовок на русский, напиши краткое изложение и оцени важность статьи для пользователя.\n"
-        "Формат (строго соблюдай, каждое поле на отдельной строке):\n"
+        "Переведи заголовок на русский и выдели 3-5 ключевых мыслей из статьи.\n"
+        "Формат (строго соблюдай):\n"
         "ЗАГОЛОВОК: <перевод заголовка>\n"
-        "КРАТКО: <1-2 предложения сути статьи на русском>\n"
-        "ВАЖНОСТЬ: <целое число от 1 до 10, где 10 — максимально важно для пользователя>\n\n"
+        "• ключевая мысль 1\n"
+        "• ключевая мысль 2\n"
+        "• ключевая мысль 3\n\n"
         f"Заголовок: {title}\n\n{text[:15000]}"
     )
     result = run_haiku(prompt, timeout=60)
     if not result:
-        return "", "", 5
+        return "", ""
     title_ru = ""
-    summary = ""
-    score = 5
+    bullets: list[str] = []
     for line in result.strip().splitlines():
         if line.startswith("ЗАГОЛОВОК:"):
             title_ru = line.replace("ЗАГОЛОВОК:", "").strip()
-        elif line.startswith("КРАТКО:"):
-            summary = line.replace("КРАТКО:", "").strip()
-        elif line.startswith("ВАЖНОСТЬ:"):
-            raw = line.replace("ВАЖНОСТЬ:", "").strip()
-            try:
-                score = max(1, min(10, int(raw.split()[0])))
-            except (ValueError, IndexError):
-                score = 5
-    return title_ru, summary, score
+        elif line.startswith(("•", "-", "*")):
+            bullets.append(line)
+    return title_ru, "\n".join(bullets)
 
 
 def generate_agent_note(title: str, text: str, source: str) -> str | None:
@@ -236,17 +225,18 @@ def main() -> None:
         source = art.get("source", "")
         print(f"[fetch_news] → {title[:70]}", file=sys.stderr)
 
-        text                        = fetch_article(url)
-        title_ru, summary, score    = generate_summary(title, text)
+        text                  = fetch_article(url)
+        title_ru, summary     = generate_summary(title, text)
+        agent_note            = generate_agent_note(title, text, source) if text else None
 
         enriched.append({
-            "source":   source,
-            "title":    title,
-            "title_ru": title_ru,
-            "url":      url,
-            "text":     text[:50000] if text else "",
-            "summary":  summary,
-            "score":    score,
+            "source":     source,
+            "title":      title,
+            "title_ru":   title_ru,
+            "url":        url,
+            "text":       text[:50000] if text else "",
+            "summary":    summary,
+            "agent_note": agent_note,
         })
 
     # Write morning-news.json (without full text to keep it small)
@@ -258,6 +248,9 @@ def main() -> None:
     )
     print(f"[fetch_news] Saved morning-news.json ({len(news_out)} articles)", file=sys.stderr)
 
+    # Write to vault
+    save_to_vault_daily(enriched)
+    append_agent_notes(enriched)
 
 
 if __name__ == "__main__":

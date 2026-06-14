@@ -9,7 +9,7 @@ from aiogram.types import Message
 from d_brain.config import get_settings
 from d_brain.services.git import VaultGit
 from d_brain.services.corrections import CorrectionsService
-from d_brain.services.goals import GoalsService
+from d_brain.services.cascade_handler import handle_cascade_reply
 from d_brain.services.reflection import ReflectionService
 from d_brain.services.session import SessionStore
 from d_brain.services.storage import VaultStorage
@@ -100,6 +100,18 @@ async def handle_voice(message: Message, bot: Bot) -> None:
         corrections = CorrectionsService(settings.vault_path)
         corrected, applied = corrections.apply(transcript)
 
+        # --- cascade goal review intercept ---
+        cascade_outcome = await handle_cascade_reply(
+            vault_path=settings.vault_path,
+            bot=bot,
+            user_id=message.from_user.id,
+            text=corrected,
+        )
+        if cascade_outcome != 'not_active':
+            await send_chunked(message, f'🎤 {corrected}')
+            logger.info('Voice routed to cascade review: %s', cascade_outcome)
+            return
+
         # --- storage ---
         timestamp = datetime.fromtimestamp(message.date.timestamp())
         storage.append_to_daily(corrected, timestamp, "[voice]")
@@ -120,13 +132,6 @@ async def handle_voice(message: Message, bot: Bot) -> None:
         if week:
             reflection.append_entry(week, corrected, source="voice")
             extra = " (+ рефлексия недели)"
-
-        # --- goals review ---
-        goals = GoalsService(settings.vault_path)
-        goals_week = goals.get_pending_week()
-        if goals_week and not week:
-            goals.append_correction(goals_week, corrected, source="voice")
-            extra = " (+ правка целей)"
 
         # --- reply ---
         footer = f"✓ Сохранено{extra}"
