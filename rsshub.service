@@ -1,0 +1,18 @@
+[Unit]
+Description=RSSHub self-hosted RSS aggregator
+After=network.target
+
+[Service]
+Type=simple
+User=myuser
+WorkingDirectory=/home/myuser/rsshub
+ExecStart=/usr/bin/node --max-http-header-size=32768 dist/index.mjs
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=1200
+Environment=CACHE_TYPE=memory
+Environment=CACHE_EXPIRE=300
+
+[Install]
+WantedBy=multi-user.target

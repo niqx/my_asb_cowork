@@ -3,8 +3,8 @@ Description=d-brain Daily Processing
 
 [Service]
 Type=oneshot
-User=niks
-WorkingDirectory=/home/niks/my_asb
-ExecStart=/home/niks/my_asb/scripts/process.sh
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/projects/my_asb_cowork/scripts/process.sh
 Environment=PYTHONUNBUFFERED=1
 TimeoutStartSec=900

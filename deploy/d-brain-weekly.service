@@ -4,12 +4,12 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=niks
-WorkingDirectory=/home/niks/my_asb
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
 ExecStartPre=+/usr/bin/systemctl stop d-brain-bot
-ExecStart=/home/niks/.local/bin/uv run python scripts/weekly.py
+ExecStart=/home/myuser/.local/bin/uv run python scripts/weekly.py
 ExecStopPost=+/usr/bin/systemctl start d-brain-bot
-EnvironmentFile=/home/niks/my_asb/.env
+EnvironmentFile=/home/myuser/projects/my_asb_cowork/.env
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=900

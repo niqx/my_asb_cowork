@@ -4,10 +4,10 @@ After=network.target d-brain-bot.service
 
 [Service]
 Type=oneshot
-User=niks
-WorkingDirectory=/home/niks/my_asb
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
 # get_settings() loads .env from WorkingDirectory (pydantic-settings), so no
 # EnvironmentFile is needed — same as the watchdog unit.
-ExecStart=/home/niks/.local/bin/uv run python -m d_brain.services.doctor
+ExecStart=/home/myuser/.local/bin/uv run python -m d_brain.services.doctor
 Environment=PYTHONUNBUFFERED=1
-Environment=PATH=/home/niks/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/myuser/.local/bin:/usr/local/bin:/usr/bin:/bin

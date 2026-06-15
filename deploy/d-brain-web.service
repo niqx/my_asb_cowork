@@ -4,12 +4,12 @@ After=network.target d-brain-bot.service
 
 [Service]
 Type=simple
-User=niks
-WorkingDirectory=/home/niks/my_asb
-ExecStart=/home/niks/.local/bin/uv run uvicorn d_brain.web.app:app --host 127.0.0.1 --port 8090 --workers 1
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/.local/bin/uv run uvicorn d_brain.web.app:app --host 127.0.0.1 --port 8090 --workers 1
 Restart=always
 RestartSec=5
-EnvironmentFile=/home/niks/my_asb/.env
+EnvironmentFile=/home/myuser/projects/my_asb_cowork/.env
 
 [Install]
 WantedBy=multi-user.target

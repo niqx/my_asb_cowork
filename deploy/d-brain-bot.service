@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=niks
-WorkingDirectory=/home/niks/my_asb
-ExecStart=/home/niks/.local/bin/uv run python -m d_brain
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/.local/bin/uv run python -m d_brain
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1

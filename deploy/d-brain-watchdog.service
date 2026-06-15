@@ -4,9 +4,9 @@ After=network.target d-brain-bot.service
 
 [Service]
 Type=simple
-User=niks
-WorkingDirectory=/home/niks/my_asb
-ExecStart=/home/niks/.local/bin/uv run python -m d_brain.services.watchdog
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/.local/bin/uv run python -m d_brain.services.watchdog
 Restart=always
 RestartSec=15
 Environment=PYTHONUNBUFFERED=1
