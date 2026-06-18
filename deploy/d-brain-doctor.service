@@ -10,4 +10,4 @@ WorkingDirectory=/home/myuser/projects/my_asb_cowork
 # EnvironmentFile is needed — same as the watchdog unit.
 ExecStart=/home/myuser/.local/bin/uv run python -m d_brain.services.doctor
 Environment=PYTHONUNBUFFERED=1
-Environment=PATH=/home/myuser/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/niks/.local/bin:/usr/local/bin:/usr/bin:/bin
