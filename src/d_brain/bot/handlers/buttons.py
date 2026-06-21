@@ -55,3 +55,11 @@ async def btn_improve(message: Message) -> None:
     await cmd_improve(message)
 
 
+@router.message(F.text == "🍽️ Еда")
+async def btn_food(message: Message, state: FSMContext) -> None:
+    """Handle Food button - open nutrition tracking session."""
+    from d_brain.bot.handlers.food import open_food_session
+
+    await open_food_session(message, state)
+
+

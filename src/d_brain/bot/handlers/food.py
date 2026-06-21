@@ -37,6 +37,17 @@ _EXIT_TRIGGERS = {"🛑 Завершить", "🛑 Завершить сесси
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
+async def open_food_session(message: Message, state: FSMContext) -> None:
+    """Enter the nutrition tracking flow: wait for the next photo/voice/text."""
+    await state.set_state(FoodCommandState.waiting_for_input)
+    await message.answer(
+        "🍽️ <b>Учёт питания</b>\n\n"
+        "Отправь фото блюда, голосовое или текстовое описание — запишу КБЖУ.\n"
+        "🛑 Завершить, когда закончишь.",
+        reply_markup=get_conversation_keyboard(),
+    )
+
+
 @router.message(Command("food"))
 async def cmd_food(message: Message, command: CommandObject, state: FSMContext) -> None:
     """Handle /food: open nutrition tracking session (optionally with inline text)."""
@@ -45,13 +56,7 @@ async def cmd_food(message: Message, command: CommandObject, state: FSMContext) 
         await _record_food_entry(message, command.args, user_id)
         await _enter_food_conversation(message, state)
         return
-    await state.set_state(FoodCommandState.waiting_for_input)
-    await message.answer(
-        "🍽️ <b>Учёт питания</b>\n\n"
-        "Отправь фото блюда, голосовое или текстовое описание — запишу КБЖУ.\n"
-        "🛑 Завершить, когда закончишь.",
-        reply_markup=get_conversation_keyboard(),
-    )
+    await open_food_session(message, state)
 
 
 # ─── waiting_for_input ────────────────────────────────────────────────────────
