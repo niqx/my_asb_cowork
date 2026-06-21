@@ -1,0 +1,9 @@
+[Unit]
+Description=d-brain Day record reminder at 18:00
+[Service]
+Type=oneshot
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/projects/my_asb_cowork/scripts/remind-evening.sh
+TimeoutStartSec=120
+Environment=PYTHONUNBUFFERED=1

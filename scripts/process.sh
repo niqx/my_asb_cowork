@@ -182,7 +182,7 @@ Format: one line per metric category, values in brackets. Example: Сон: [scor
         OURA_CONTEXT=$(echo "$OURA_CONTEXT" | grep -v '^$' | grep -v 'Here is\|Вот\|Let me\|I will\|Calling' | head -20 || echo "$OURA_CONTEXT")
 
         echo "=== Fetching nutrition context (d-doctor) ==="
-        NUTRITION_CONTEXT=$(uv run python /home/niks/my_doctor/scripts/nutrition_context.py 2>/dev/null || echo "")
+        NUTRITION_CONTEXT=$(uv run python /home/myuser/my_doctor/scripts/nutrition_context.py 2>/dev/null || echo "")
     fi
 
     HEALTH_SECTION=""

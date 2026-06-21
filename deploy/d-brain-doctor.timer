@@ -1,8 +1,8 @@
 [Unit]
-Description=d-brain daily self-diagnostic (08:00 local)
+Description=d-brain daily self-diagnostic (10:00 local)
 
 [Timer]
-OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 10:00:00
 Persistent=true
 
 [Install]

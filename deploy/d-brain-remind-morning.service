@@ -1,0 +1,9 @@
+[Unit]
+Description=d-brain Morning record reminder at 13:00
+[Service]
+Type=oneshot
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/home/myuser/projects/my_asb_cowork/scripts/remind-morning.sh
+TimeoutStartSec=120
+Environment=PYTHONUNBUFFERED=1

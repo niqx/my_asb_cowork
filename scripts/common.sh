@@ -2,10 +2,10 @@
 # common.sh — shared functions for d-brain scripts
 # Source this file: source "$(dirname "$0")/common.sh"
 
-export HOME="/home/niks"
+export HOME="/home/myuser"
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-PROJECT_DIR="/home/niks/my_asb"
+PROJECT_DIR="/home/myuser/projects/my_asb_cowork"
 VAULT_DIR="$PROJECT_DIR/vault"
 ENV_FILE="$PROJECT_DIR/.env"
 
