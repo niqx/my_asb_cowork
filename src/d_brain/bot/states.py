@@ -28,3 +28,10 @@ class SettingsState(StatesGroup):
     """States for Settings menu flows."""
 
     waiting_for_city = State()  # Waiting for user to type a new city name
+
+
+class FoodCommandState(StatesGroup):
+    """States for the /food nutrition tracking session."""
+
+    waiting_for_input = State()  # Waiting for first food entry (text/voice/photo)
+    in_conversation = State()    # Session open; each new entry is silently recorded

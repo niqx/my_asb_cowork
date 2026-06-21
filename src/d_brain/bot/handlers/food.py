@@ -1,301 +1,219 @@
-"""Food logging session handler.
+"""Handler for /food command — silent nutrition tracking session.
 
 Flow:
-  [🍽 Еда] or /food  → enter FoodState.collecting
-                      → show food keyboard (✅ Записал всё / ❌ Отмена)
-  photos/voice/text   → buffer file_ids and texts, confirm each message
-  [✅ Записал всё]    → process session → show КБЖУ analysis
-  [❌ Отмена]         → cancel session → return to main keyboard
-  10-min timeout      → auto-process whatever was collected
+  /food [text]  → open session (+ process inline args if given)
+  text/voice    → processor.execute_food_prompt() → "🍽️ Записано"
+  photo         → save to vault, pass path to execute_food_prompt → "🍽️ Записано"
+  🛑 Завершить  → close session
+
+Claude writes КБЖУ directly to vault/daily/{today}.md and returns a one-line
+confirmation; the bot shows only "🍽️ Записано" to the user (silent logging).
 """
 
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 from datetime import datetime
 
-from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram import Bot, Router
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from d_brain.bot.keyboards import get_food_keyboard, get_main_keyboard
-from d_brain.bot.states import FoodState
+from d_brain.bot.keyboards import get_conversation_keyboard, get_main_keyboard
+from d_brain.bot.states import FoodCommandState
 from d_brain.config import get_settings
-from d_brain.services.git import VaultGit
-from d_brain.services.session import SessionStore
+from d_brain.services.runtime import get_processor
 from d_brain.services.storage import VaultStorage
 from d_brain.services.transcription import DeepgramTranscriber
 
 router = Router(name="food")
 logger = logging.getLogger(__name__)
 
-_FOOD_TIMEOUT_SECS = 600  # 10 minutes
-_timeout_tasks: dict[int, asyncio.Task[None]] = {}
-
-_MEAL_TYPE_EMOJI = {
-    "завтрак": "🌅",
-    "обед": "☀️",
-    "ужин": "🌙",
-    "перекус": "🍎",
-}
+_EXIT_TRIGGERS = {"🛑 Завершить", "🛑 Завершить сессию", "/stop"}
 
 
-# ────────────────────────── entry points ──────────────────────────
-
-async def enter_food_mode(message: Message, state: FSMContext) -> None:
-    """Start a food logging session."""
-    if not message.from_user:
-        return
-    settings = get_settings()
-    if not settings.nutrition_enabled:
-        await message.answer("🍽 Нутрициолог отключён. Включи в /settings.")
-        return
-    await state.set_state(FoodState.collecting)
-    await state.update_data(file_ids=[], texts=[], msg_count=0)
-    _schedule_timeout(message.from_user.id, state, message.bot)
-    await message.answer(
-        "🍽 <b>Режим записи еды</b>\n\n"
-        "Отправляй фото, голосовые или текст — всё, что ел.\n"
-        "Когда закончишь — нажми <b>✅ Записал всё</b>.",
-        reply_markup=get_food_keyboard(),
-    )
-
+# ─── Entry point ──────────────────────────────────────────────────────────────
 
 @router.message(Command("food"))
-async def cmd_food(message: Message, state: FSMContext) -> None:
-    await enter_food_mode(message, state)
-
-
-# ────────────────────────── message collection ──────────────────────────
-
-@router.message(FoodState.collecting, lambda m: m.photo is not None)
-async def food_photo(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Buffer a photo during food session."""
-    if not message.photo or not message.from_user:
+async def cmd_food(message: Message, command: CommandObject, state: FSMContext) -> None:
+    """Handle /food: open nutrition tracking session (optionally with inline text)."""
+    user_id = message.from_user.id if message.from_user else 0
+    if command.args:
+        await _record_food_entry(message, command.args, user_id)
+        await _enter_food_conversation(message, state)
         return
-    data = await state.get_data()
-    file_ids: list[dict] = data.get("file_ids", [])
-    # Store the largest photo variant file_id
-    file_ids.append({"type": "photo", "file_id": message.photo[-1].file_id})
-    msg_count = data.get("msg_count", 0) + 1
-    await state.update_data(file_ids=file_ids, msg_count=msg_count)
-    _reschedule_timeout(message.from_user.id, state, bot)
-    await message.answer(f"📷 Фото добавлено ({msg_count} шт. в сессии)")
+    await state.set_state(FoodCommandState.waiting_for_input)
+    await message.answer(
+        "🍽️ <b>Учёт питания</b>\n\n"
+        "Отправь фото блюда, голосовое или текстовое описание — запишу КБЖУ.\n"
+        "🛑 Завершить, когда закончишь.",
+        reply_markup=get_conversation_keyboard(),
+    )
 
 
-@router.message(FoodState.collecting, lambda m: m.voice is not None)
-async def food_voice(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Transcribe and buffer a voice message during food session."""
-    if not message.voice or not message.from_user:
+# ─── waiting_for_input ────────────────────────────────────────────────────────
+
+@router.message(FoodCommandState.waiting_for_input, lambda m: m.photo is not None)
+async def food_waiting_photo(message: Message, bot: Bot, state: FSMContext) -> None:
+    """Handle photo as the first food entry."""
+    user_id = message.from_user.id if message.from_user else 0
+    description = await _save_photo_and_describe(message, bot)
+    if description:
+        await _record_food_entry(message, description, user_id)
+    await _enter_food_conversation(message, state)
+
+
+@router.message(FoodCommandState.waiting_for_input)
+async def food_waiting_input(message: Message, bot: Bot, state: FSMContext) -> None:
+    """Handle text/voice as the first food entry."""
+    prompt = await _extract_prompt(message, bot)
+    if not prompt:
+        return  # stay in waiting_for_input until usable input arrives
+    user_id = message.from_user.id if message.from_user else 0
+    await _record_food_entry(message, prompt, user_id)
+    await _enter_food_conversation(message, state)
+
+
+# ─── in_conversation ──────────────────────────────────────────────────────────
+
+@router.message(FoodCommandState.in_conversation, lambda m: m.photo is not None)
+async def food_conv_photo(message: Message, bot: Bot, state: FSMContext) -> None:
+    """Handle additional photo entries during the session."""
+    user_id = message.from_user.id if message.from_user else 0
+    description = await _save_photo_and_describe(message, bot)
+    if description:
+        await _record_food_entry(message, description, user_id)
+    # stay in in_conversation; keyboard already shown
+
+
+@router.message(FoodCommandState.in_conversation)
+async def food_conv_input(message: Message, bot: Bot, state: FSMContext) -> None:
+    """Handle text/voice follow-ups and the exit trigger."""
+    text = (message.text or "").strip()
+    if text in _EXIT_TRIGGERS:
+        await state.clear()
+        await message.answer("✅ Учёт питания завершён.", reply_markup=get_main_keyboard())
         return
-    await message.chat.do(action="typing")
-    settings = get_settings()
-    transcriber = DeepgramTranscriber(settings.deepgram_api_key)
+    if text.startswith("/"):
+        await state.clear()
+        await message.answer("Вышел из режима питания.", reply_markup=get_main_keyboard())
+        return
+    prompt = await _extract_prompt(message, bot)
+    if not prompt:
+        return
+    user_id = message.from_user.id if message.from_user else 0
+    await _record_food_entry(message, prompt, user_id)
+    # stay in in_conversation
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _enter_food_conversation(message: Message, state: FSMContext) -> None:
+    """Transition to in_conversation and show the persistent keyboard."""
+    await state.set_state(FoodCommandState.in_conversation)
+    await message.answer(
+        "💬 Добавляй ещё — фото, голос или текст. 🛑 Завершить, когда всё записал.",
+        reply_markup=get_conversation_keyboard(),
+    )
+
+
+async def _record_food_entry(message: Message, description: str, user_id: int = 0) -> None:
+    """Send food description to Claude; show brief confirmation (not full reply)."""
+    status_msg = await message.answer("⏳ Записываю...")
+    processor = get_processor(get_settings())
+
+    async def run_with_progress() -> dict:
+        task = asyncio.create_task(
+            asyncio.to_thread(processor.execute_food_prompt, description, user_id)
+        )
+        elapsed = 0
+        while not task.done():
+            await asyncio.sleep(30)
+            elapsed += 30
+            if not task.done():
+                try:
+                    await status_msg.edit_text(f"⏳ Записываю... ({elapsed}s)")
+                except Exception:
+                    pass
+        return await task
+
+    result = await run_with_progress()
     try:
-        file = await bot.get_file(message.voice.file_id)
+        if result.get("error"):
+            await status_msg.edit_text(f"❌ {html.escape(result['error'])}")
+        else:
+            await status_msg.edit_text("🍽️ Записано")
+    except Exception:
+        pass
+
+
+async def _extract_prompt(message: Message, bot: Bot) -> str | None:
+    """Extract text from a voice or text message (mirrors do.py helper)."""
+    if message.voice:
+        await message.chat.do(action="typing")
+        settings = get_settings()
+        transcriber = DeepgramTranscriber(settings.deepgram_api_key)
+        try:
+            file = await bot.get_file(message.voice.file_id)
+            if not file.file_path:
+                await message.answer("❌ Не удалось скачать голосовое")
+                return None
+            file_bytes = await bot.download_file(file.file_path)
+            if not file_bytes:
+                await message.answer("❌ Не удалось скачать голосовое")
+                return None
+            prompt = await transcriber.transcribe(file_bytes.read())
+        except Exception as e:
+            logger.exception("Failed to transcribe voice for /food")
+            await message.answer(f"❌ Не удалось транскрибировать: {html.escape(str(e))}")
+            return None
+        if not prompt:
+            await message.answer("❌ Не удалось распознать речь")
+            return None
+        await message.answer(f"🎤 <i>{html.escape(prompt)}</i>")
+        return prompt
+
+    if message.text:
+        return message.text
+
+    await message.answer("❌ Отправь текст, голосовое или фото")
+    return None
+
+
+async def _save_photo_and_describe(message: Message, bot: Bot) -> str | None:
+    """Save photo to vault/attachments and return a description string for Claude."""
+    if not message.photo:
+        return None
+    settings = get_settings()
+    storage = VaultStorage(settings.vault_path)
+    photo = message.photo[-1]
+    try:
+        file = await bot.get_file(photo.file_id)
         if not file.file_path:
-            await message.answer("Не удалось скачать голосовое")
-            return
+            await message.answer("❌ Не удалось скачать фото")
+            return None
         file_bytes = await bot.download_file(file.file_path)
         if not file_bytes:
-            await message.answer("Не удалось скачать голосовое")
-            return
-        transcript = await transcriber.transcribe(file_bytes.read())
-        if not transcript:
-            await message.answer("Не удалось распознать речь")
-            return
+            await message.answer("❌ Не удалось скачать фото")
+            return None
+        extension = "jpg"
+        if "." in file.file_path:
+            extension = file.file_path.rsplit(".", 1)[-1]
+        timestamp = datetime.fromtimestamp(message.date.timestamp())
+        day = timestamp.date()
+        attachments_dir = storage.get_attachments_dir(day)
+        filename = f"food-{timestamp.strftime('%H%M%S')}-{message.message_id}.{extension}"
+        file_path = attachments_dir / filename
+        file_path.write_bytes(file_bytes.read())
+        relative_path = f"attachments/{day.isoformat()}/{filename}"
+        description = f"Фото еды: {relative_path}"
+        if message.caption:
+            description += f" ({message.caption})"
+        return description
     except Exception as e:
-        logger.exception("Voice transcription error in food mode")
-        await message.answer(f"Ошибка транскрипции: {e}")
-        return
-
-    data = await state.get_data()
-    texts: list[str] = data.get("texts", [])
-    texts.append(transcript)
-    msg_count = data.get("msg_count", 0) + 1
-    await state.update_data(texts=texts, msg_count=msg_count)
-    _reschedule_timeout(message.from_user.id, state, bot)
-    await message.answer(f"🎤 <i>{transcript}</i>\n\n✓ Добавлено")
-
-
-@router.message(FoodState.collecting, F.text, ~F.text.in_({"✅ Записал всё", "❌ Отмена"}))
-async def food_text(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Buffer a text message during food session."""
-    if not message.text or not message.from_user:
-        return
-    data = await state.get_data()
-    texts: list[str] = data.get("texts", [])
-    texts.append(message.text)
-    msg_count = data.get("msg_count", 0) + 1
-    await state.update_data(texts=texts, msg_count=msg_count)
-    _reschedule_timeout(message.from_user.id, state, bot)
-    await message.answer("✓ Текст добавлен")
-
-
-# ────────────────────────── finish / cancel ──────────────────────────
-
-@router.message(FoodState.collecting, F.text == "✅ Записал всё")
-async def food_done(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Process buffered food data and show analysis."""
-    if not message.from_user:
-        return
-    _cancel_timeout(message.from_user.id)
-    await _process_food_session(message.from_user.id, state, bot, message)
-
-
-@router.message(FoodState.collecting, F.text == "❌ Отмена")
-async def food_cancel(message: Message, state: FSMContext) -> None:
-    """Cancel food session without analysis."""
-    if not message.from_user:
-        return
-    _cancel_timeout(message.from_user.id)
-    await state.clear()
-    await message.answer("Отменено.", reply_markup=get_main_keyboard())
-
-
-# ────────────────────────── processing ──────────────────────────
-
-async def _process_food_session(
-    user_id: int,
-    state: FSMContext,
-    bot: Bot,
-    trigger_message: Message | None = None,
-) -> None:
-    """Download photos, call NutritionService, post result, clear state."""
-    data = await state.get_data()
-    file_ids: list[dict] = data.get("file_ids", [])
-    texts: list[str] = data.get("texts", [])
-
-    if not file_ids and not texts:
-        await state.clear()
-        if trigger_message:
-            await trigger_message.answer(
-                "Ничего не добавлено. Сессия закрыта.",
-                reply_markup=get_main_keyboard(),
-            )
-        return
-
-    # Send "thinking" indicator
-    chat_id = trigger_message.chat.id if trigger_message else user_id
-    processing_msg = await bot.send_message(
-        chat_id,
-        "🔍 Анализирую питание… это займёт несколько секунд.",
-    )
-
-    # Download photos
-    photo_bytes_list: list[bytes] = []
-    for item in file_ids:
-        try:
-            file = await bot.get_file(item["file_id"])
-            if file.file_path:
-                fb = await bot.download_file(file.file_path)
-                if fb:
-                    photo_bytes_list.append(fb.read())
-        except Exception:
-            logger.exception("Failed to download food photo %s", item["file_id"])
-
-    settings = get_settings()
-    try:
-        from d_brain.services.nutrition import get_nutrition_service
-        svc = get_nutrition_service()
-        analysis = await svc.analyze_meal(
-            photo_bytes_list=photo_bytes_list,
-            texts=texts,
-        )
-    except Exception as e:
-        logger.exception("Nutrition analysis error")
-        await bot.edit_message_text(
-            f"Ошибка анализа: {e}",
-            chat_id=chat_id,
-            message_id=processing_msg.message_id,
-        )
-        await state.clear()
-        await bot.send_message(chat_id, "Сессия закрыта.", reply_markup=get_main_keyboard())
-        return
-
-    await state.clear()
-
-    # ── Write to vault daily note so main agent sees food context ──
-    _write_meal_to_vault(settings, analysis, user_id)
-
-    # Build result message
-    emoji = _MEAL_TYPE_EMOJI.get(analysis.meal_type, "🍽")
-    report = _format_analysis(emoji, analysis)
-
-    await bot.edit_message_text(
-        report,
-        chat_id=chat_id,
-        message_id=processing_msg.message_id,
-        parse_mode="HTML",
-    )
-    await bot.send_message(chat_id, "✅ Записано.", reply_markup=get_main_keyboard())
-
-
-def _write_meal_to_vault(settings: "Settings", analysis: "MealAnalysis", user_id: int) -> None:  # type: ignore[name-defined]
-    """Write a one-line food entry to vault daily note for main agent context."""
-    try:
-        storage = VaultStorage(settings.vault_path)
-        entry = (
-            f"🍽 {analysis.meal_type.capitalize()}: {analysis.description} "
-            f"— {analysis.calories} ккал "
-            f"(Б:{analysis.protein}г Ж:{analysis.fat}г У:{analysis.carbs}г)\n"
-            f"  💬 {analysis.comment}\n"
-            f"  💡 {analysis.recommendation}"
-        )
-        storage.append_to_daily(entry, datetime.now(), "[food]")
-
-        session = SessionStore(settings.vault_path)
-        session.append(user_id, "food", text=entry)
-
-        if settings.obsidian_sync_enabled:
-            asyncio.create_task(asyncio.to_thread(
-                VaultGit(settings.vault_path).commit_and_push, "sync: food"
-            ))
-    except Exception:
-        logger.exception("Failed to write meal to vault")
-
-
-def _format_analysis(emoji: str, a: "MealAnalysis") -> str:  # type: ignore[name-defined]
-    return (
-        f"{emoji} <b>{a.meal_type.capitalize()}</b>\n"
-        f"{a.description}\n\n"
-        f"<b>КБЖУ:</b>\n"
-        f"  Калории: <b>{a.calories}</b> ккал\n"
-        f"  Белки: <b>{a.protein}</b> г  |  Жиры: <b>{a.fat}</b> г  |  Углеводы: <b>{a.carbs}</b> г\n\n"
-        f"<i>{a.comment}</i>\n\n"
-        f"💡 <b>Совет:</b> {a.recommendation}"
-    )
-
-
-# ────────────────────────── timeout helpers ──────────────────────────
-
-def _schedule_timeout(user_id: int, state: FSMContext, bot: Bot | None) -> None:
-    _cancel_timeout(user_id)
-    if bot is None:
-        return
-    task = asyncio.create_task(
-        _run_timeout(user_id, state, bot),
-        name=f"food_timeout_{user_id}",
-    )
-    _timeout_tasks[user_id] = task
-
-
-def _reschedule_timeout(user_id: int, state: FSMContext, bot: Bot) -> None:
-    _schedule_timeout(user_id, state, bot)
-
-
-def _cancel_timeout(user_id: int) -> None:
-    task = _timeout_tasks.pop(user_id, None)
-    if task and not task.done():
-        task.cancel()
-
-
-async def _run_timeout(user_id: int, state: FSMContext, bot: Bot) -> None:
-    await asyncio.sleep(_FOOD_TIMEOUT_SECS)
-    current = await state.get_state()
-    if current == FoodState.collecting.state:
-        logger.info("Food session timeout for user %s — auto-processing", user_id)
-        await bot.send_message(user_id, "⏱ Время ожидания вышло, обрабатываю что собрал…")
-        await _process_food_session(user_id, state, bot)
+        logger.exception("Failed to save food photo")
+        await message.answer(f"❌ Не удалось сохранить фото: {html.escape(str(e))}")
+        return None

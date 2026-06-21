@@ -1,0 +1,13 @@
+[Unit]
+Description=d-brain ночной отчёт о здоровье (еда + Oura, 00:00)
+After=network.target
+
+[Service]
+Type=oneshot
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/bin/bash /home/myuser/projects/my_asb_cowork/scripts/nutrition_report.sh
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/myuser/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=journal
+StandardError=journal

@@ -334,6 +334,63 @@ EXECUTION:
         # steering target if the user sends a follow-up mid-answer.
         return self._ask(prompt, wrap=True, request_id=f"do-{user_id or 'anon'}")
 
+    def execute_food_prompt(self, description: str, user_id: int = 0) -> dict[str, Any]:
+        """Record a food entry to vault/daily/{today}.md via Claude.
+
+        Claude evaluates КБЖУ from the description (text or photo path) and
+        appends a structured line to the daily note. The caller shows only a
+        short "🍽️ Записано" confirmation — Claude's reply is not forwarded.
+
+        Args:
+            description: Free-text description or "Фото еды: vault/attachments/..."
+            user_id: Telegram user ID (used for request_id uniqueness)
+
+        Returns:
+            {"report": "🍽️ Записано", "processed_entries": 1} on success,
+            or {"error": ..., "processed_entries": 0} on failure.
+        """
+        from d_brain.config import get_settings
+
+        settings = get_settings()
+        today = date.today().isoformat()
+
+        profile = (
+            f"Рост: {settings.nutrition_height_cm} см, "
+            f"Вес: {settings.nutrition_weight_kg} кг, "
+            f"Возраст: {settings.nutrition_age} лет, "
+            f"{settings.nutrition_gender}. "
+            f"Активность: {settings.nutrition_activity}. "
+            f"Цель: {settings.nutrition_goal}. "
+            f"Суточная норма: {settings.nutrition_daily_kcal} ккал | "
+            f"Б:{settings.nutrition_daily_protein}г "
+            f"Ж:{settings.nutrition_daily_fat}г "
+            f"У:{settings.nutrition_daily_carbs}г"
+        )
+
+        prompt = f"""Ты нутрициолог-ассистент. Запиши приём пищи в дневник.
+
+Профиль пользователя: {profile}
+
+Данные о приёме пищи: {description}
+
+Инструкция:
+1. Оцени КБЖУ: калории (целое число), белки/жиры/углеводы (1 знак после запятой)
+2. Определи тип приёма пищи: завтрак | обед | ужин | перекус
+3. Запиши результат в конец файла daily/{today}.md, добавив строку в формате:
+   ## HH:MM [food]
+   🍽️ {{meal_type}}: {{краткое описание}} — {{kcal}} ккал | Б{{protein}} Ж{{fat}} У{{carbs}}
+   (где HH:MM — текущее время по Москве)
+4. Ответь ОДНОЙ строкой подтверждения без markdown, например:
+   OK: перекус, 320 ккал
+
+ВАЖНО: используй Write или Edit инструмент для записи. Работаешь в cwd=vault.
+Ответь строго одной строкой — без объяснений, без markdown."""
+
+        result = self._ask(prompt, wrap=True, request_id=f"food-{user_id or 'anon'}")
+        if result.get("error"):
+            return {"error": result["error"], "processed_entries": 0}
+        return {"report": "🍽️ Записано", "processed_entries": 1}
+
     def generate_weekly(self) -> dict[str, Any]:
         """Generate weekly digest with Claude.
 

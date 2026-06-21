@@ -59,6 +59,18 @@ class Settings(BaseSettings):
         description="Date when user first used the bot (YYYY-MM-DD), for onboarding help button",
     )
 
+    # Nutrition profile (loaded from NUTRITION_* env vars / .env)
+    nutrition_height_cm: int = Field(default=175, description="Height in cm")
+    nutrition_weight_kg: float = Field(default=80.0, description="Weight in kg")
+    nutrition_age: int = Field(default=30, description="Age in years")
+    nutrition_gender: str = Field(default="мужчина", description="Gender")
+    nutrition_activity: str = Field(default="умеренная активность", description="Activity level")
+    nutrition_goal: str = Field(default="поддерживать вес", description="Nutrition goal")
+    nutrition_daily_kcal: int = Field(default=2000, description="Daily kcal target")
+    nutrition_daily_protein: float = Field(default=150.0, description="Daily protein target (g)")
+    nutrition_daily_fat: float = Field(default=55.0, description="Daily fat target (g)")
+    nutrition_daily_carbs: float = Field(default=220.0, description="Daily carbs target (g)")
+
     # Location (updated dynamically by /location command)
     location_city: str = Field(default="Москва", description="Current city name")
     location_lat: float = Field(default=55.75, description="Current latitude")

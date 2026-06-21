@@ -152,6 +152,35 @@ def _morning_prompt(vault: Path, today: str) -> str:
     )
 
 
+def _nutrition_prompt(today: str) -> str:
+    """Night health report: food summary from daily note + Oura data."""
+    kcal = os.environ.get("NUTRITION_DAILY_KCAL", "2650")
+    protein = os.environ.get("NUTRITION_DAILY_PROTEIN", "180")
+    fat = os.environ.get("NUTRITION_DAILY_FAT", "80")
+    carbs = os.environ.get("NUTRITION_DAILY_CARBS", "303")
+    return (
+        f"Сегодня {today}. Сформируй ночной отчёт о здоровье.\n\n"
+        f"Суточные нормы пользователя: {kcal} ккал | Б:{protein}г Ж:{fat}г У:{carbs}г\n\n"
+        f"ЗАДАЧА:\n"
+        f"1. Прочитай daily/{today}.md — найди все строки с тегом [food], "
+        f"просуммируй КБЖУ за день (калории, белки, жиры, углеводы)\n"
+        f"2. Проверь доступность Oura: вызови mcp__oura__user-info или аналогичный tool. "
+        f"Если доступен — запроси данные за сон и активность за сегодня ({today})\n"
+        f"3. Сравни итог КБЖУ с нормами\n"
+        f"4. Сформируй HTML-отчёт\n\n"
+        f"ФОРМАТ ОТЧЁТА (строго Telegram HTML: только теги <b>,<i>,<code>,<s>,<u>):\n"
+        f"🌙 <b>Здоровье за день</b>\n\n"
+        f"Секция «Еда»: итог КБЖУ vs норма + краткая оценка\n"
+        f"Секция «Сон»: часы и качество из Oura (или «Oura: нет данных за сегодня»)\n"
+        f"Секция «Активность»: шаги/калории из Oura (или «Oura: нет данных за сегодня»)\n\n"
+        f"ПРАВИЛА:\n"
+        f"- Если записей [food] нет — укажи «Еда: записей не было»\n"
+        f"- Если Oura недоступен или вернул ошибку — укажи «Oura: нет данных за сегодня», не прерывай работу\n"
+        f"- Только raw HTML, без markdown, без объяснений перед тегами\n"
+        f"- Начни строго с 🌙 <b>Здоровье за день</b>"
+    )
+
+
 # ── runner ──────────────────────────────────────────────────────────────────
 
 def run(cmd: str, *, stdin_text: str = "", wrap_override: bool | None = None) -> tuple[str, bool]:
@@ -173,6 +202,7 @@ def run(cmd: str, *, stdin_text: str = "", wrap_override: bool | None = None) ->
         "reflect-strict": (_reflect_strict_prompt(today), True),
         "daily": (_daily_monolith_prompt(today), True),
         "morning": (_morning_prompt(vault, today), True),
+        "nutrition": (_nutrition_prompt(today), True),
     }
 
     if cmd == "ask":
