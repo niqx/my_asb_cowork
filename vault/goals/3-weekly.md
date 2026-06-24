@@ -2,7 +2,7 @@
 type: weekly
 updated: 2026-06-14
 last_accessed: 2026-06-14
-relevance: 0.86
+relevance: 0.85
 tier: warm
 period: 2026-W25
 ---
