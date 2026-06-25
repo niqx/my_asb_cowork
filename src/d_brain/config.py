@@ -111,7 +111,12 @@ class Settings(BaseSettings):
         default=300.0, description="Retry delay for a failed one-shot ('at') job"
     )
 
-    @field_validator("runtime_dir", "vault_path", mode="after")
+    work_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".dbrain" / "work",
+        description="Directory for work memory storage (raw, digest, index, commitments)",
+    )
+
+    @field_validator("runtime_dir", "vault_path", "work_dir", mode="after")
     @classmethod
     def _expand_user(cls, v: Path) -> Path:
         # pydantic-settings keeps a literal "~"; the cron CLI / scripts

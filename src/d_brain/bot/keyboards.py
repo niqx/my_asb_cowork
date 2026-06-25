@@ -25,9 +25,7 @@ def get_main_keyboard(settings: Settings | None = None) -> ReplyKeyboardMarkup:
     builder.button(text="⚙️ Настройки")
 
     # Row 2: Правки + Еда + optional onboarding/improve buttons
-    row2 = []
-    row2.append("✏️ Правки")
-    row2.append("🍽️ Еда")
+    row2 = ["✏️ Правки", "🍽️ Еда"]
     if settings.first_seen:
         try:
             days_since = (date.today() - date.fromisoformat(settings.first_seen)).days
@@ -41,10 +39,15 @@ def get_main_keyboard(settings: Settings | None = None) -> ReplyKeyboardMarkup:
     for text in row2:
         builder.button(text=text)
 
+    # Row 3: work buttons (always present)
+    builder.button(text="➕ Работа")
+    builder.button(text="❓ Спросить")
+
+    # adjust: row1=3, row2=variable (2–4), row3=2
     if len(row2) <= 3:
-        builder.adjust(3, len(row2))
+        builder.adjust(3, len(row2), 2)
     else:
-        builder.adjust(3, 2, 2)
+        builder.adjust(3, 2, 2, 2)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 

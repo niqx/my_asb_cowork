@@ -391,6 +391,189 @@ EXECUTION:
             return {"error": result["error"], "processed_entries": 0}
         return {"report": "🍽️ Записано", "processed_entries": 1}
 
+    def execute_work_add(
+        self,
+        content: str,
+        source_hint: str,
+        attachment_path: str | None,
+        user_id: int = 0,
+    ) -> dict[str, Any]:
+        """Save a work material to ~/.dbrain/work/ via Claude.
+
+        Claude determines name/type/slug, writes raw + digest files, updates
+        commitments.md and index.md (all absolute paths, NOT vault-relative).
+
+        Returns:
+            {"title": str, "metrics": int, "commitments": int, "report": str}
+            or {"error": str}
+        """
+        from d_brain.config import get_settings
+        from d_brain.services.work_memory import MAX_DIGEST_CHARS, WorkMemory
+
+        settings = get_settings()
+        mem = WorkMemory(settings.work_dir)
+        mem.ensure_dirs()
+
+        today = date.today().isoformat()
+        month = date.today().strftime("%Y-%m")
+        base = str(mem.base_dir)
+
+        # Pre-create month dirs so Claude can write without mkdir
+        (mem.base_dir / "raw" / month).mkdir(parents=True, exist_ok=True)
+        (mem.base_dir / "digest" / month).mkdir(parents=True, exist_ok=True)
+
+        # Truncate content for prompt; raw is always the full text
+        content_for_prompt = content
+        truncation_note = ""
+        if len(content) > MAX_DIGEST_CHARS:
+            content_for_prompt = content[:MAX_DIGEST_CHARS]
+            truncation_note = (
+                "\n\n[Примечание: текст обрезан до 50 000 символов для анализа; "
+                "raw-файл содержит полный текст]"
+            )
+
+        source_line = f"\nИСТОЧНИК (приоритет для названия): {source_hint}" if source_hint else ""
+
+        attachment_block = ""
+        if attachment_path:
+            attachment_block = (
+                f"\n\nПРИЛОЖЕНИЕ — абсолютный путь к файлу: {attachment_path}\n"
+                "Прочитай его через vision для извлечения метрик и содержимого."
+            )
+
+        prompt = f"""Сохрани рабочий материал в базу рабочего контекста.
+
+СЕГОДНЯ: {today}
+БАЗА ДАННЫХ (АБСОЛЮТНЫЕ пути — НЕ vault-относительные, т.к. cwd=vault):
+  raw:         {base}/raw/{month}/
+  digest:      {base}/digest/{month}/
+  commitments: {mem.commitments_path}
+  index:       {mem.index_path}
+{source_line}
+
+СОДЕРЖИМОЕ МАТЕРИАЛА:
+{content_for_prompt}{truncation_note}{attachment_block}
+
+ЗАДАЧА — выполни строго по шагам:
+
+1. Определи НАЗВАНИЕ и ТИП материала (встреча | дашборд | отчёт | прочее).
+   Если источник указан выше — используй его как приоритет для названия.
+
+2. Придумай SLUG: только латиница/цифры/дефисы, из названия, максимум 40 символов.
+   Пример: "quarterly-review-june", "standup-2026-06-26", "dashboard-retention"
+
+3. Сохрани RAW файл — Write инструментом по абсолютному пути:
+   {base}/raw/{month}/{today}-SLUG.md
+   Содержимое = весь переданный текст материала (полностью, без сокращений).
+
+4. Сгенерируй ДАЙДЖЕСТ и сохрани Write инструментом по абсолютному пути:
+   {base}/digest/{month}/{today}-SLUG.md
+
+   Строгая структура дайджеста (пустые секции → "—"):
+   # НАЗВАНИЕ — {today}
+   Тип: ТИП
+   Источник: {source_hint if source_hint else "авто-определение"}
+
+   ## Метрики
+   - название: значение (период если есть)
+
+   ## Решения
+
+   ## Договорённости
+   - кто — что — срок
+
+   ## Риски
+
+   ## Контекст
+
+5. Если в материале есть ДОГОВОРЁННОСТИ — добавь их в конец файла:
+   {mem.commitments_path}
+   Формат каждой строки: "- {today} | кто — что — срок"
+   Если файл не существует — создай его с заголовком:
+   "# Договорённости\\n\\n"
+   Если новых договорённостей нет — файл НЕ ТРОГАЙ.
+
+6. Добавь одну строку в конец файла {mem.index_path}:
+   "{today} | ТИП | SLUG | тег1, тег2, ..."
+   Если файл не существует — создай его с заголовком:
+   "# Индекс рабочих материалов\\n\\nдата | тип | slug | теги\\n"
+
+ВАЖНО: используй Write/Edit инструменты. Все пути АБСОЛЮТНЫЕ.
+Работаешь в cwd=vault — но файлы work находятся ВНЕ vault.
+
+Ответь СТРОГО ОДНОЙ строкой без объяснений:
+OK | НАЗВАНИЕ | метрик:N | договорённостей:M"""
+
+        result = self._ask(prompt, wrap=True, request_id=f"work-add-{user_id or 'anon'}")
+        if result.get("error"):
+            return {"error": result["error"]}
+
+        # Parse the one-line response: "OK | название | метрик:N | договорённостей:M"
+        reply = (result.get("report") or "").strip()
+        for line in reply.splitlines():
+            line = line.strip()
+            if line.startswith("OK |"):
+                try:
+                    parts = [p.strip() for p in line.split("|")]
+                    if len(parts) >= 4:
+                        title = parts[1]
+                        metrics = int(parts[2].split(":")[-1])
+                        commitments = int(parts[3].split(":")[-1])
+                        return {
+                            "report": line,
+                            "title": title,
+                            "metrics": metrics,
+                            "commitments": commitments,
+                        }
+                except (ValueError, IndexError):
+                    logger.warning("Failed to parse work_add response line: %r", line)
+
+        logger.warning("work_add: no OK line in reply: %r", reply[:200])
+        return {"report": reply, "title": "материал", "metrics": 0, "commitments": 0}
+
+    def execute_work_ask(self, question: str, user_id: int = 0) -> dict[str, Any]:
+        """Search work memory and answer a question.
+
+        Claude reads index.md, greps digests, and answers with source attribution.
+
+        Returns:
+            {"report": HTML answer} or {"error": str}
+        """
+        from d_brain.config import get_settings
+        from d_brain.services.work_memory import WorkMemory
+
+        settings = get_settings()
+        mem = WorkMemory(settings.work_dir)
+        today = date.today().isoformat()
+
+        prompt = f"""Ответь на вопрос по сохранённым рабочим материалам.
+
+СЕГОДНЯ: {today}
+БАЗА РАБОЧЕГО КОНТЕКСТА (абсолютные пути):
+  Индекс:         {mem.index_path}
+  Дайджесты:      {mem.base_dir}/digest/
+  Договорённости: {mem.commitments_path}
+
+ВОПРОС: {question}
+
+ЗАДАЧА:
+1. Прочитай {mem.index_path} — получи обзор доступных материалов и дат.
+2. Используй Grep/Glob/Read для поиска релевантных дайджестов в {mem.base_dir}/digest/.
+3. Если вопрос про договорённости или задолженности — прочитай {mem.commitments_path}.
+4. Ответь кратко и по делу, ОБЯЗАТЕЛЬНО укажи источник (название материала, дата).
+5. Если ответа в сохранённых материалах нет — честно скажи:
+   "не нашёл в сохранённых материалах"
+
+ФОРМАТ ОТВЕТА (строго Telegram HTML):
+- Только теги: <b>, <i>, <code>
+- Начни с краткого ответа по существу
+- В конце укажи: <i>Источник: название (дата)</i>
+- Если источников несколько — перечисли
+- Максимум 3000 символов
+- Только raw HTML, без markdown, без пояснений перед тегами"""
+
+        return self._ask(prompt, wrap=True, request_id=f"work-ask-{user_id or 'anon'}")
+
     def generate_weekly(self) -> dict[str, Any]:
         """Generate weekly digest with Claude.
 

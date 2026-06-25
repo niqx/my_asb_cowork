@@ -152,6 +152,36 @@ def _morning_prompt(vault: Path, today: str) -> str:
     )
 
 
+def _work_insights_prompt(today: str) -> str:
+    """Weekly work insights: patterns, hanging commitments, risks from digest/ last 7 days.
+
+    Registered as "work-insights" mode. NOT auto-scheduled — activate manually.
+    """
+    work_dir = Path.home() / ".dbrain" / "work"
+    return (
+        f"Сегодня {today}. Сформируй сводку рабочих инсайтов за последние 7 дней.\n\n"
+        f"БАЗА РАБОЧЕГО КОНТЕКСТА: {work_dir}\n\n"
+        f"ЗАДАЧА:\n"
+        f"1. Прочитай {work_dir}/index.md — найди материалы за последние 7 дней\n"
+        f"2. Прочитай соответствующие дайджесты из {work_dir}/digest/ "
+        f"(используй Glob/Read для перечисления файлов)\n"
+        f"3. Прочитай {work_dir}/commitments.md — выдели незакрытые договорённости\n"
+        f"4. Выяви паттерны: повторяющиеся темы, тренды в метриках, системные риски\n"
+        f"5. Сформируй HTML-сводку\n\n"
+        f"ФОРМАТ (строго Telegram HTML: только теги <b>,<i>,<code>,<s>,<u>):\n"
+        f"💡 <b>Инсайты недели</b>\n\n"
+        f"Секция «Ключевые метрики»: тренды и изменения по данным из дайджестов\n"
+        f"Секция «Висящие договорённости»: кто — что — срок (из commitments.md)\n"
+        f"Секция «Риски»: что требует внимания по материалам недели\n"
+        f"Секция «Паттерны»: повторяющиеся темы и наблюдения\n\n"
+        f"ПРАВИЛА:\n"
+        f"- Если материалов нет — укажи «Нет материалов за последние 7 дней»\n"
+        f"- Если commitments.md не существует — пропусти секцию договорённостей\n"
+        f"- Только raw HTML, без markdown\n"
+        f"- Начни строго с 💡 <b>Инсайты недели</b>"
+    )
+
+
 def _nutrition_prompt(today: str) -> str:
     """Night health report: food summary from daily note + Oura data."""
     kcal = os.environ.get("NUTRITION_DAILY_KCAL", "2650")
@@ -203,6 +233,7 @@ def run(cmd: str, *, stdin_text: str = "", wrap_override: bool | None = None) ->
         "daily": (_daily_monolith_prompt(today), True),
         "morning": (_morning_prompt(vault, today), True),
         "nutrition": (_nutrition_prompt(today), True),
+        "work-insights": (_work_insights_prompt(today), True),
     }
 
     if cmd == "ask":

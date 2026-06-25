@@ -63,3 +63,17 @@ async def btn_food(message: Message, state: FSMContext) -> None:
     await open_food_session(message, state)
 
 
+@router.message(F.text == "➕ Работа")
+async def btn_work_add(message: Message, state: FSMContext) -> None:
+    """Handle Work Add button - open work context saving session."""
+    from d_brain.bot.handlers.work import open_work_add_session
+
+    await open_work_add_session(message, state)
+
+
+@router.message(F.text == "❓ Спросить")
+async def btn_work_ask(message: Message, state: FSMContext) -> None:
+    """Handle Work Ask button - open work context querying session."""
+    from d_brain.bot.handlers.work import open_work_ask_session
+
+    await open_work_ask_session(message, state)

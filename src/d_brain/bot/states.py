@@ -35,3 +35,17 @@ class FoodCommandState(StatesGroup):
 
     waiting_for_input = State()  # Waiting for first food entry (text/voice/photo)
     in_conversation = State()    # Session open; each new entry is silently recorded
+
+
+class WorkAddState(StatesGroup):
+    """States for the work context adding session (➕ Работа)."""
+
+    waiting_for_input = State()  # Waiting for first material (photo/doc/voice/text)
+    in_session = State()         # Session open; each new material is processed
+
+
+class WorkAskState(StatesGroup):
+    """States for the work context querying session (❓ Спросить)."""
+
+    waiting_for_question = State()  # Waiting for first question
+    in_session = State()            # Session open; follow-up questions continue

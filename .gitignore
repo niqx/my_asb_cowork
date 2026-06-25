@@ -53,3 +53,6 @@ vault/MOC/*
 
 # Keep template goals but ignore user-modified versions at runtime
 # (goals templates ARE tracked in git)
+
+# Work memory (stored outside vault, but guard against accidental inclusion)
+work/
