@@ -2,7 +2,7 @@
 Description=d-brain ночной отчёт о здоровье (00:00)
 
 [Timer]
-OnCalendar=*-*-* 00:00:00
+OnCalendar=*-*-* 00:30:00
 Persistent=true
 
 [Install]

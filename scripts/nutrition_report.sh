@@ -1,11 +1,16 @@
 #!/bin/bash
-# nutrition_report.sh — ночной отчёт о здоровье (еда + Oura)
-# Запускается в 00:00 через d-brain-nutrition.timer
+# nutrition_report.sh — вечерний отчёт о здоровье (еда + Oura)
+# Запускается в 00:30 через d-brain-nutrition.timer
 set -e
 
 source "$(dirname "$0")/common.sh"
 init
 init_mcp
+
+# Отчёт запускается в 00:30 и подводит итог за ПРОШЕДШИЙ день (вчера).
+# Переопределяем TODAY на вчерашнюю дату локально для этого отчёта.
+REPORT_DAY=$(date -d "$TODAY - 1 day" +%Y-%m-%d 2>/dev/null || date -d "yesterday" +%Y-%m-%d)
+TODAY="$REPORT_DAY"
 
 echo "=== Nutrition/health report for $TODAY ==="
 
