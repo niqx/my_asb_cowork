@@ -2,7 +2,7 @@
 type: note
 title: Phase 2: EXECUTE
 last_accessed: 2026-05-17
-relevance: 0.37
+relevance: 0.35
 tier: cold
 ---
 # Phase 2: EXECUTE
