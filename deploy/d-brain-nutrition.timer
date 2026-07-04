@@ -1,8 +1,8 @@
 [Unit]
-Description=d-brain ночной отчёт о здоровье (00:00)
+Description=d-brain еженедельный отчёт о здоровье (вс 21:00)
 
 [Timer]
-OnCalendar=*-*-* 00:30:00
+OnCalendar=Sun 21:00
 Persistent=true
 
 [Install]

@@ -137,18 +137,33 @@ def _morning_prompt(vault: Path, today: str) -> str:
     city = os.environ.get("CURRENT_CITY", "Москва")
     tz = os.environ.get("LOCATION_TZ", "Europe/Moscow")
     context = _read_session_file(vault, "morning_context.txt")
+    work_dir = Path.home() / ".dbrain" / "work"
+    # Yesterday's date for Oura queries and daily log
+    import datetime as _dt
+    yesterday = (_dt.date.fromisoformat(today) - _dt.timedelta(days=1)).isoformat()
     return (
-        f"User's current location: {city} (timezone: {tz}).\n"
-        f"Today is {today} ({weekday}). Generate morning briefing according to "
-        f"morning-briefer skill.\n\n"
-        f"=== CONTEXT FOR TODAY ===\n{context}\n\n"
-        f"=== INSTRUCTIONS ===\n"
-        f"1. Read MEMORY.md, goals/3-weekly.md, goals/2-monthly.md\n"
-        f"2. Read daily logs for last 2 days\n"
-        f"3. Call mcp__todoist__find-tasks-by-date for today\n"
-        f"4. Call mcp__todoist__find-tasks to get overdue tasks\n"
-        f"5. Generate HTML briefing using morning-briefer skill template\n\n"
-        f"CRITICAL: Return RAW HTML only. No markdown. No explanations."
+        f"Местоположение: {city} (timezone: {tz}).\n"
+        f"Сегодня {today} ({weekday}). Вчера: {yesterday}.\n"
+        f"Сгенерируй утренний брифинг по шаблону morning-briefer skill.\n\n"
+        f"=== КОНТЕКСТ (погода + новости) ===\n{context}\n\n"
+        f"=== ИНСТРУКЦИИ ===\n"
+        f"1. Прочитай MEMORY.md, goals/3-weekly.md, goals/2-monthly.md\n"
+        f"2. Проверь Oura за ВЧЕРА ({yesterday}):\n"
+        f"   - mcp__oura__oura_get_daily_activity — шаги, активные ккал, score\n"
+        f"   - mcp__oura__oura_get_daily_sleep — длительность сна, sleep score\n"
+        f"   Если Oura недоступен — укажи «данные Oura недоступны» и продолжай\n"
+        f"3. Получи задачи из Todoist:\n"
+        f"   - mcp__todoist__find-tasks-by-date для сегодня\n"
+        f"   - mcp__todoist__find-tasks с фильтром overdue\n"
+        f"   Задачи — ТОЛЬКО источник для синтеза «Фокуса дня», отдельным списком не выводить\n"
+        f"4. Проверь рабочий контекст ({work_dir}):\n"
+        f"   - commitments.md — договорённости с дедлайном сегодня/завтра\n"
+        f"   - index.md — свежие записи за последние 1-2 дня\n"
+        f"   Если ничего релевантного — секцию «По работе» ПРОПУСТИТЬ полностью\n"
+        f"5. Прочитай daily/{yesterday}.md — контекст вчерашнего дня (еда, записи)\n"
+        f"6. Прочитай vault/.session/morning-headlines.json — AI-новости (до 3 штук)\n"
+        f"7. Сгенерируй HTML-брифинг по шаблону из morning-briefer skill\n\n"
+        f"КРИТИЧНО: только raw HTML. Без markdown. Без объяснений. Начни с ☀️ Доброе утро!"
     )
 
 
@@ -179,6 +194,61 @@ def _work_insights_prompt(today: str) -> str:
         f"- Если commitments.md не существует — пропусти секцию договорённостей\n"
         f"- Только raw HTML, без markdown\n"
         f"- Начни строго с 💡 <b>Инсайты недели</b>"
+    )
+
+
+def _health_weekly_prompt(week_start: str, week_end: str) -> str:
+    """Weekly health report: Oura trends + food summary for the full Mon–Sun week."""
+    kcal = os.environ.get("NUTRITION_DAILY_KCAL", "2650")
+    protein = os.environ.get("NUTRITION_DAILY_PROTEIN", "180")
+    fat = os.environ.get("NUTRITION_DAILY_FAT", "80")
+    carbs = os.environ.get("NUTRITION_DAILY_CARBS", "303")
+    return (
+        f"Сегодня воскресенье {week_end}. Сформируй еженедельный отчёт о здоровье "
+        f"за период {week_start}–{week_end} (понедельник–воскресенье).\n\n"
+        f"Суточные нормы пользователя: {kcal} ккал | Б:{protein}г Ж:{fat}г У:{carbs}г\n\n"
+        f"ЗАДАЧА:\n"
+        f"1. Oura за всю неделю (данные уже синхронизированы, вс вечер):\n"
+        f"   - mcp__oura__oura_get_daily_sleep(start_date='{week_start}', end_date='{week_end}') "
+        f"— вернёт массив по дням\n"
+        f"   - mcp__oura__oura_get_daily_activity(start_date='{week_start}', end_date='{week_end}') "
+        f"— вернёт массив по дням\n"
+        f"   Если по какому-то дню данных нет — пропусти его в расчётах, не падай.\n"
+        f"2. Еда: для каждого дня с {week_start} по {week_end} прочитай daily/{{YYYY-MM-DD}}.md, "
+        f"найди строки с тегом [food], посчитай КБЖУ по каждому дню. "
+        f"Отметь в скольких днях из 7 были записи [food].\n"
+        f"3. Посчитай агрегаты и тренды:\n"
+        f"   Сон: средний score за неделю, лучшая ночь (день недели + score), "
+        f"худшая ночь (день + score), паттерн (будни vs выходные, динамика).\n"
+        f"   Активность: средние шаги/день, сумма активных ккал за неделю, "
+        f"самый активный день (название + шаги), паттерн по дням.\n"
+        f"   Питание: количество дней с записями, средние КБЖУ за эти дни, "
+        f"сравнение с нормами пользователя.\n"
+        f"4. Сформируй ВЫВОДЫ недели: 2-3 инсайта — паттерны сна, активности, "
+        f"связь между ними и самочувствием, конкретная рекомендация на следующую неделю.\n\n"
+        f"ФОРМАТ ОТЧЁТА (строго Telegram HTML: только теги <b>,<i>,<code>,<s>,<u>):\n"
+        f"🌙 <b>Здоровье за неделю</b>\n"
+        f"<i>{week_start}–{week_end}</i>\n\n"
+        f"😴 <b>Сон</b>\n"
+        f"Средний score: N/100\n"
+        f"Лучшая ночь: день недели (score) · Худшая: день (score)\n"
+        f"1-2 фразы про тренд/паттерн\n\n"
+        f"🏃 <b>Активность</b>\n"
+        f"Средние шаги: N/день · Активных ккал за неделю: N\n"
+        f"Самый активный день: день (шаги)\n"
+        f"1-2 фразы про паттерн\n\n"
+        f"🍽️ <b>Питание</b>\n"
+        f"Дней с записями: N из 7\n"
+        f"Если N>0: средние в эти дни: N ккал | БN ЖN УN + сравнение с нормой\n"
+        f"Если N==0: «за неделю записей о питании не было»\n\n"
+        f"💡 <b>Выводы недели</b>\n"
+        f"2-3 инсайта + конкретная рекомендация на следующую неделю\n\n"
+        f"ПРАВИЛА:\n"
+        f"- Если Oura по какому-то дню пусто — пропусти его в расчётах\n"
+        f"- Если еды нет вообще — секция питания краткая («за неделю записей о питании не было»), "
+        f"не выдумывай данные\n"
+        f"- Только raw HTML, без markdown, без технических деталей про файлы\n"
+        f"- Начни строго с 🌙 <b>Здоровье за неделю</b>"
     )
 
 
@@ -229,6 +299,8 @@ def run(cmd: str, *, stdin_text: str = "", wrap_override: bool | None = None) ->
     # (prompt, wrap) per command. JSON/HTML phases use wrap=True (clean reply
     # between markers); the shell still post-processes via extract_json.py /
     # clean_claude_output.
+    week_start = os.environ.get("WEEK_START", "")
+    week_end = os.environ.get("WEEK_END", today)
     builders = {
         "capture": (_capture_prompt(vault, today), True),
         "execute": (_execute_prompt(today), True),
@@ -238,6 +310,7 @@ def run(cmd: str, *, stdin_text: str = "", wrap_override: bool | None = None) ->
         "morning": (_morning_prompt(vault, today), True),
         "nutrition": (_nutrition_prompt(today), True),
         "work-insights": (_work_insights_prompt(today), True),
+        "health-weekly": (_health_weekly_prompt(week_start, week_end), True),
     }
 
     if cmd == "ask":
