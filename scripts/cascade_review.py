@@ -118,23 +118,54 @@ def call_reviewer(settings, week_just_finished: str, feedback_history: list[dict
     prompt = _build_prompt(week_just_finished, today, feedback_history)
 
     logger.info("Calling cascade reviewer (week %s, iter %d)", week_just_finished, len(feedback_history))
-    res = get_session(settings).ask(
-        prompt, timeout=DEFAULT_TIMEOUT, request_id="maint-cascade", wrap=True
-    )
-    if not res.ok:
-        logger.error("Cascade reviewer failed: %s %s", res.status, res.detail)
-        return {"_error": (res.detail or res.status)[:500]}
 
-    raw = res.reply or ""
-    logger.debug("Cascade reviewer raw output: %s", raw[:500])
-    # Strip C0 control chars: the fixed-width pane soft-wraps long lines and the
-    # capture can land a bare newline inside a JSON string (see extract_json.py).
-    candidate = re.sub(r"[\x00-\x1f]", "", _strip_to_json(raw))
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError as e:
-        logger.error("JSON decode failed: %s; raw[:500]=%s", e, candidate[:500])
-        return {"_error": f"JSON decode: {e}", "_raw": raw[:1500]}
+    for attempt in range(2):
+        res = get_session(settings).ask(
+            prompt, timeout=DEFAULT_TIMEOUT, request_id="maint-cascade", wrap=True
+        )
+        if not res.ok:
+            logger.error("Cascade reviewer failed: %s %s", res.status, res.detail)
+            return {"_error": (res.detail or res.status)[:500]}
+
+        raw = res.reply or ""
+        logger.debug("Cascade reviewer raw output (attempt %d): %s", attempt, raw[:500])
+        # Strip C0 control chars: the fixed-width pane soft-wraps long lines and the
+        # capture can land a bare newline inside a JSON string (see extract_json.py).
+        candidate = re.sub(r"[\x00-\x1f]", "", _strip_to_json(raw))
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "JSON decode failed (attempt %d): %s; candidate[:500]=%s",
+                attempt, e, candidate[:500],
+            )
+            if attempt == 0:
+                logger.info("Retrying cascade reviewer after JSON decode error...")
+                continue
+            return {"_error": f"JSON decode: {e}", "_raw": raw[:1500]}
+
+        # Validate critical fields: a successful parse of an empty/truncated JSON
+        # would produce a misleading card with all placeholders filled with "?".
+        next_week_id = parsed.get("next_week_id")
+        next_week = parsed.get("next_week")
+        if not next_week_id or not isinstance(next_week, dict) or not next_week:
+            logger.error(
+                "Cascade reviewer returned incomplete JSON (missing next_week_id/next_week) "
+                "(attempt %d): candidate[:500]=%s",
+                attempt, candidate[:500],
+            )
+            if attempt == 0:
+                logger.info("Retrying cascade reviewer after incomplete JSON...")
+                continue
+            return {
+                "_error": "Пустой или неполный ответ от Claude (возможно, обрезан при захвате из сессии)",
+                "_raw": raw[:1500],
+            }
+
+        return parsed
+
+    # Unreachable, but satisfies type checkers.
+    return {"_error": "Cascade reviewer exhausted retries"}
 
 
 def _esc(s: str) -> str:
