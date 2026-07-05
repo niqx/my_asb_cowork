@@ -9,7 +9,7 @@ _VAULT = Path(os.environ.get("VAULT_DIR", Path(__file__).parent.parent / "vault"
 _SESSION = _VAULT / ".session"
 SEEN_PATH = _SESSION / "news-seen.json"
 HEADLINES_PATH = _SESSION / "morning-headlines.json"
-DEDUP_DAYS = 14
+DEDUP_DAYS = 6
 
 WMO = {
     0:"ясно", 1:"преимущественно ясно", 2:"переменная облачность", 3:"пасмурно",

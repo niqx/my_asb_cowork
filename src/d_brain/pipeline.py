@@ -143,15 +143,19 @@ def _morning_prompt(vault: Path, today: str) -> str:
     yesterday = (_dt.date.fromisoformat(today) - _dt.timedelta(days=1)).isoformat()
     return (
         f"Местоположение: {city} (timezone: {tz}).\n"
-        f"Сегодня {today} ({weekday}). Вчера: {yesterday}.\n"
-        f"Сгенерируй утренний брифинг по шаблону morning-briefer skill.\n\n"
+        f"Сегодня {today} ({weekday}). Вчера: {yesterday}.\n\n"
         f"=== КОНТЕКСТ (погода + новости) ===\n{context}\n\n"
         f"=== ИНСТРУКЦИИ ===\n"
+        f"КРИТИЧНО: Прочитай ПРЯМО СЕЙЧАС файл vault/.claude/skills/morning-briefer/SKILL.md "
+        f"инструментом Read (даже если ты уже читал его раньше в этой сессии — прочитай ЗАНОВО, "
+        f"т.к. файл мог измениться). Строго следуй Output Template из ЭТОГО файла, "
+        f"а не своим предыдущим ответам или памяти о старом формате.\n\n"
         f"1. Прочитай MEMORY.md, goals/3-weekly.md, goals/2-monthly.md\n"
-        f"2. Проверь Oura за ВЧЕРА ({yesterday}):\n"
-        f"   - mcp__oura__oura_get_daily_activity — шаги, активные ккал, score\n"
-        f"   - mcp__oura__oura_get_daily_sleep — длительность сна, sleep score\n"
-        f"   Если Oura недоступен — укажи «данные Oura недоступны» и продолжай\n"
+        f"2. Получи сон за ВЧЕРА ({yesterday}) через mcp__oura__oura_get_daily_sleep —\n"
+        f"   используй ТОЛЬКО как контекст для тона «Фокуса дня» и «Совета дня».\n"
+        f"   НЕ выводи цифры сна явно в тексте отчёта — только влияние на рекомендацию\n"
+        f"   (например, «после короткой ночи не перегружай день»), без слова «Oura» и без score.\n"
+        f"   Если Oura недоступен — продолжай без упоминания сна.\n"
         f"3. Получи задачи из Todoist:\n"
         f"   - mcp__todoist__find-tasks-by-date для сегодня\n"
         f"   - mcp__todoist__find-tasks с фильтром overdue\n"
@@ -163,6 +167,7 @@ def _morning_prompt(vault: Path, today: str) -> str:
         f"5. Прочитай daily/{yesterday}.md — контекст вчерашнего дня (еда, записи)\n"
         f"6. Прочитай vault/.session/morning-headlines.json — AI-новости (до 3 штук)\n"
         f"7. Сгенерируй HTML-брифинг по шаблону из morning-briefer skill\n\n"
+        f"Используй СТРУКТУРУ ИЗ ФАЙЛА, который ты только что прочитал — не свою память о прошлых брифингах.\n\n"
         f"КРИТИЧНО: только raw HTML. Без markdown. Без объяснений. Начни с ☀️ Доброе утро!"
     )
 
