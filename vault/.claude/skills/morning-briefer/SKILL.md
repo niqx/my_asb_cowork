@@ -2,8 +2,8 @@
 type: note
 description: Generates a personalized morning briefing with weather, Oura health data, focus synthesis, work context, and AI news. News is sent separately via morning.sh.
 last_accessed: 2026-06-28
-relevance: 0.9
-tier: active
+relevance: 0.88
+tier: warm
 name: morning-briefer
 ---
 
