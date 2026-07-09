@@ -274,6 +274,8 @@ def render_card(proposal: dict, iteration: int) -> str:
 
 
 async def send_card(bot: Bot, user_id: int, text: str) -> None:
+    from d_brain.bot.keyboards import get_cascade_decision_keyboard
+
     chunks = []
     cur = text
     LIMIT = 3900
@@ -284,11 +286,12 @@ async def send_card(bot: Bot, user_id: int, text: str) -> None:
         chunks.append(cur[:cut])
         cur = cur[cut:].lstrip()
     chunks.append(cur)
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        reply_markup = get_cascade_decision_keyboard() if i == len(chunks) - 1 else None
         try:
-            await bot.send_message(chat_id=user_id, text=chunk)
+            await bot.send_message(chat_id=user_id, text=chunk, reply_markup=reply_markup)
         except Exception:
-            await bot.send_message(chat_id=user_id, text=chunk, parse_mode=None)
+            await bot.send_message(chat_id=user_id, text=chunk, reply_markup=reply_markup, parse_mode=None)
 
 
 async def main(week_arg: str | None = None) -> None:
@@ -327,7 +330,7 @@ async def main(week_arg: str | None = None) -> None:
             await bot.session.close()
         return
 
-    deadline = datetime.now().astimezone() + timedelta(days=7)
+    deadline = datetime.now().astimezone() + timedelta(hours=6)
     if dry_run:
         import json as _json
         print("[DRYRUN] proposal JSON:")

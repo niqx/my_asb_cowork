@@ -16,93 +16,74 @@ from typing import Literal
 
 from aiogram import Bot
 
+from d_brain.bot.keyboards import get_main_keyboard
 from d_brain.services.cascade import CascadeService
 from d_brain.services.cascade_applier import CascadeApplier
 from d_brain.services.git import VaultGit
 
 logger = logging.getLogger(__name__)
 
-Intent = Literal["accept", "cancel", "feedback", "none"]
 Outcome = Literal["applied", "cancelled", "feedback_recorded", "not_active", "error"]
 
-
-_ACCEPT_PATTERNS = (
-    "годно", "ок ", " ок", "ок.", "ок!", "ок,",
-    "принимаю", "принять", "согласен", "идёт", "идет",
-    "подтверждаю", "подтверждено", "yes", "да, годно",
-    "да!", "да.", "да ", "поехали", "применяй", "применить",
-    "сохраняй", "сохранить", "пиши", "запиши",
-)
-_CANCEL_PATTERNS = (
-    "отмена", "отменить", "отмени", "cancel",
-    "не надо", "забей", "не сейчас", "пропусти",
-)
-
-
-def _classify(text: str) -> Intent:
-    """Naive keyword-based intent detection. Good enough for short voice replies."""
-    t = (text or "").strip().lower()
-    if not t:
-        return "none"
-
-    if t in {"да", "ага", "угу", "ok", "ok!", "ok.", "ok,", "+", "👍"}:
-        return "accept"
-    if t in {"нет", "no", "-", "👎"}:
-        return "cancel"
-
-    for pat in _CANCEL_PATTERNS:
-        if pat in t:
-            return "cancel"
-    for pat in _ACCEPT_PATTERNS:
-        if pat in t:
-            return "accept"
-
-    if len(t) <= 200 and any(
-        kw in t for kw in (
-            "поменя", "замени", "убери", "удали", "добавь", "добавить",
-            "вместо", "лучше", "правк", "измен", "не нравится",
-            "переделай", "пересчитай", "уточни",
-        )
-    ):
-        return "feedback"
-
-    if len(t) > 30:
-        return "feedback"
-
-    return "none"
+_BTN_ACCEPT = "✅ Принять"
+_BTN_FEEDBACK = "✏️ Внести правки"
+_BTN_CANCEL = "❌ Отмена"
 
 
 async def handle_cascade_reply(
     *, vault_path: Path, bot: Bot, user_id: int, text: str
 ) -> Outcome:
-    """If cascade is pending, interpret `text` and act. Returns outcome."""
+    """If cascade is pending, route based on exact button text. Returns outcome.
+
+    Only explicit button presses are intercepted — free-form text falls through
+    to the regular diary handler (was the bug: any text >30 chars was captured).
+    """
     cascade = CascadeService(vault_path)
+
+    # Auto-clear silently if deadline passed
+    if cascade.is_expired():
+        cascade.clear()
+        return "not_active"
+
     state = cascade.get()
     if state is None or state.get("stage") in {"applied", "cancelled"}:
         return "not_active"
 
-    intent = _classify(text)
-    if intent == "none":
-        return "not_active"
+    t = (text or "").strip()
 
-    if intent == "accept":
+    # --- Exact button matching ---
+    if t == _BTN_ACCEPT:
         return await _apply(cascade, vault_path, bot, user_id)
 
-    if intent == "cancel":
+    if t == _BTN_CANCEL:
         cascade.clear()
         await bot.send_message(
             chat_id=user_id,
             text="🚫 Каскадное ревью отменено. Файлы целей не тронул.",
+            reply_markup=get_main_keyboard(),
         )
         return "cancelled"
 
-    cascade.record_feedback(text)
-    await bot.send_message(
-        chat_id=user_id,
-        text="📝 Принял правки, пересчитываю предложение... это займёт минуту-две.",
-    )
-    asyncio.create_task(_rerun_cascade(vault_path))
-    return "feedback_recorded"
+    if t == _BTN_FEEDBACK:
+        cascade.enter_feedback_mode()
+        await bot.send_message(
+            chat_id=user_id,
+            text="✏️ Опиши правки текстом или голосом — что поменять в предложении.",
+        )
+        return "feedback_recorded"
+
+    # --- Feedback mode: free-form text is actual feedback ---
+    if cascade.is_in_feedback_mode():
+        cascade.record_feedback(t)
+        await bot.send_message(
+            chat_id=user_id,
+            text="📝 Принял правки, пересчитываю предложение... это займёт минуту-две.",
+        )
+        asyncio.create_task(_rerun_cascade(vault_path))
+        return "feedback_recorded"
+
+    # awaiting_decision but not a button press -> not cascade-related
+    return "not_active"
 
 
 async def _apply(
@@ -146,7 +127,11 @@ async def _apply(
         logger.warning("Git commit failed: %s", e)
         summary_lines.append(f"<i>Git push не прошёл: {str(e)[:200]}</i>")
 
-    await bot.send_message(chat_id=user_id, text="\n".join(summary_lines))
+    await bot.send_message(
+        chat_id=user_id,
+        text="\n".join(summary_lines),
+        reply_markup=get_main_keyboard(),
+    )
     return "applied"
 
 

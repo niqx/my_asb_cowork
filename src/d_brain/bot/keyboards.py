@@ -68,6 +68,16 @@ def get_conversation_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
+def get_cascade_decision_keyboard() -> ReplyKeyboardMarkup:
+    """Keyboard shown when a cascade proposal is awaiting user decision."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="✅ Принять")
+    builder.button(text="✏️ Внести правки")
+    builder.button(text="❌ Отмена")
+    builder.adjust(2, 1)
+    return builder.as_markup(resize_keyboard=True, is_persistent=True)
+
+
 def get_edit_mode_keyboard() -> ReplyKeyboardMarkup:
     """Keyboard shown during edit mode (collecting entries)."""
     builder = ReplyKeyboardBuilder()
