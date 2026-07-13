@@ -136,7 +136,7 @@ When invoked via process.sh, this skill runs in 3 phases:
 | Monthly Top 3 | goals/2-monthly.md | 1 action/день на приоритет |
 | Yearly Focus | goals/1-yearly-*.md | 30 мин/день на стратегию |
 
-Создавай recurring tasks с label "process-goal" (max 5-7 активных).
+НЕ создавай process-goal задачи в Todoist. Пользователь отключил автогенерацию process-goal задач. Существующие process-goal задачи можно только ЧИТАТЬ (find-tasks) для контекста отчёта, если они есть. Создание новых process-goal задач ЗАПРЕЩЕНО.
 
 ### 3. Включи в отчёт
 

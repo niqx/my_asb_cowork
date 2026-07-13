@@ -153,20 +153,6 @@ Where `suggested_day` = closest upcoming weekday with low workload (from execute
 → <b>Перенести</b> на ближайший рабочий день?
 ```
 
-4. Count consecutive days without process goals (process_goals == 0):
-   - Read last daily files (`daily/YYYY-MM-DD.md`) for previous 2 days
-   - Check execute.json cached for those days (or infer from daily log entries)
-   - Count N = consecutive days ending today where process_goals == 0
-5. If N ≥ 3 — add ⚠️ to section header and offer to create process-goal tasks:
-
-```html
-<b>⚠️ 🎯 Process goals:</b> {N}-й день без process-задач
-→ Создать process-goal задачи прямо сейчас?
-• "Обзор процессов недели" (priority 2, due today)
-• "Обновить weekly goal" (priority 3, due today)
-```
-
-**Если `sick_day == true` в capture.json:** не показывать ⚠️ эскалацию, не считать день в счётчик N.
 
 ### 6. Адаптация тона отчёта по типу дня
 
