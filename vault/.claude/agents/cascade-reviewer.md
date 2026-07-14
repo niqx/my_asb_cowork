@@ -2,8 +2,8 @@
 type: note
 description: Strategic coach that reviews the week against monthly/yearly goals and proposes next week's ONE Big Thing, Must Do tasks, and (when needed) refreshed monthly/yearly priorities. Output is JSON for verification by the user before files are mutated.
 last_accessed: 2026-05-05
-relevance: 0.4
-tier: cold
+relevance: 0.1
+tier: archive
 name: cascade-reviewer
 ---
 

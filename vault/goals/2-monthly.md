@@ -1,10 +1,10 @@
 ---
 type: monthly
-period: 2026-07
 updated: 2026-07-14
 last_accessed: 2026-07-14
 relevance: 1.0
 tier: active
+period: 2026-07
 ---
 
 # Monthly Focus — July 2026
