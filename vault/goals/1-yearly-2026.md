@@ -2,7 +2,7 @@
 type: yearly
 updated: 2026-07-14
 last_accessed: 2026-07-14
-relevance: 0.94
+relevance: 0.93
 tier: active
 period: 2026
 ---
