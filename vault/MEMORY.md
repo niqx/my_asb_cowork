@@ -2,7 +2,7 @@
 type: note
 title: Agent Memory
 last_accessed: 2026-01-01
-relevance: 0.97
+relevance: 0.98
 tier: core
 ---
 
