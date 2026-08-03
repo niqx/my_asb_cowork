@@ -2,7 +2,7 @@
 type: weekly
 updated: 2026-08-02
 last_accessed: 2026-08-02
-relevance: 1.0
+relevance: 0.98
 tier: active
 period: 2026-W32
 week: 2026-W32
