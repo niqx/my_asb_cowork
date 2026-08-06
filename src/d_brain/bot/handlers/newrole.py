@@ -86,7 +86,7 @@ async def _extract_text_or_voice(message: Message, bot: Bot) -> str | None:
     if message.text:
         return message.text
 
-    await message.answer("❌ Отправь текст или голосовое")
+    await message.answer("❌ Здесь только текст или голосовое. Документы и скриншоты кидай в «➕ Работа».")
     return None
 
 

@@ -208,6 +208,14 @@ async def _handle_work_document(message: Message, bot: Bot) -> None:
         )
         return
 
+    # Telegram doesn't allow bots to download files larger than 20 MB
+    if doc.file_size and doc.file_size > 20 * 1024 * 1024:
+        await message.answer(
+            "⚠️ Файл больше 20 МБ — Telegram не отдаёт такие боту.\n"
+            "Пришли версию полегче или выжимку."
+        )
+        return
+
     try:
         file = await bot.get_file(doc.file_id)
         if not file.file_path:
@@ -231,7 +239,17 @@ async def _handle_work_document(message: Message, bot: Bot) -> None:
     caption = message.caption or ""
     source_hint = caption or filename
     content = f"{caption}\n\n{text}".strip() if caption else text
-    await _process_work_item(message, content, source_hint=source_hint, attachment_path=None)
+
+    attachment_path = None
+    if ext == ".pdf":
+        settings = get_settings()
+        from d_brain.services.work_memory import WorkMemory
+        mem = WorkMemory(settings.work_dir)
+        mem.ensure_dirs()
+        path = mem.save_attachment(data, "pdf", message.message_id)
+        attachment_path = str(path)
+
+    await _process_work_item(message, content, source_hint=source_hint, attachment_path=attachment_path)
 
 
 async def _process_work_item(
