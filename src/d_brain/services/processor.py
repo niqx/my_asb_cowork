@@ -574,6 +574,151 @@ OK | НАЗВАНИЕ | метрик:N | договорённостей:M"""
 
         return self._ask(prompt, wrap=True, request_id=f"work-ask-{user_id or 'anon'}")
 
+    def execute_role_switch_preview(self, correction: str = "") -> dict[str, Any]:
+        """Generate a preview of what the role switch would do — without applying it.
+
+        Reads vault/.session/new-role-intake.md (accumulated new-role context),
+        current MEMORY.md, and goals/*.md. Returns a human-readable HTML summary
+        of what will be transferred, archived, and rewritten.
+
+        Args:
+            correction: Optional user correction to incorporate into the preview.
+
+        Returns:
+            {"report": HTML preview} or {"error": str}
+        """
+        today = date.today().isoformat()
+        intake_path = self.vault_path / ".session" / "new-role-intake.md"
+
+        correction_block = ""
+        if correction:
+            correction_block = f"\n\nПРАВКА ПОЛЬЗОВАТЕЛЯ (учти при формировании превью):\n{correction}\n"
+
+        prompt = f"""Ты — ассистент Second Brain. Сформируй ПРЕВЬЮ переноса роли (НЕ применяй изменения).
+
+СЕГОДНЯ: {today}
+VAULT: {self.vault_path}
+
+ШАГ 1 — Прочитай накопленный контекст новой роли:
+  {intake_path}
+
+ШАГ 2 — Прочитай текущее состояние Second Brain:
+  {self.vault_path}/MEMORY.md
+  {self.vault_path}/goals/0-vision-3y.md
+  {self.vault_path}/goals/1-yearly-2026.md
+  {self.vault_path}/goals/2-monthly.md
+  {self.vault_path}/goals/3-weekly.md
+{correction_block}
+ШАГ 3 — Сформируй ПРЕВЬЮ (только анализ, без записи файлов):
+
+1. ЧТО ВОЙДЁТ В НОВЫЙ MEMORY.md:
+   - Перечисли ключевые факты о новой роли (команда, предметная область, метрики, люди)
+   - Что из старого MEMORY.md останется, что будет заменено
+
+2. ЧТО БУДЕТ ЗААРХИВИРОВАНО:
+   - Пункты старого MEMORY.md, которые теряют актуальность
+   - Старые goals, которые не переносятся
+
+3. ЧЕРНОВИКИ НОВЫХ ЦЕЛЕЙ (под новую роль):
+   - 3-weekly: 3 цели на ближайшие 3 недели
+   - 2-monthly: 2–3 приоритета на месяц
+   - 1-yearly: годовые цели под новую предметную область
+   - 0-vision: скорректированное видение (если новая роль меняет вектор)
+
+4. ЧТО ОСТАЛОСЬ НЕЯСНЫМ (если чего-то не хватает в контексте) — кратко.
+
+ФОРМАТ ОТВЕТА — строго Telegram HTML:
+- Разделы через <b>заголовки</b>
+- Теги: <b>, <i>, <code>
+- Максимум 3500 символов
+- Только raw HTML, без markdown, без пояснений до/после
+- Начни с: 📋 <b>Превью переноса роли</b>"""
+
+        return self._ask(prompt, wrap=True, request_id="role-switch-preview")
+
+    def execute_role_switch_apply(self) -> dict[str, Any]:
+        """Execute the actual role switch: archive old context, write new MEMORY + goals.
+
+        Archives current MEMORY.md and goals/*.md to goals/archive/ before
+        overwriting. Vault/.session/new-role-intake.md is left untouched as
+        the original source.
+
+        Returns:
+            {"report": confirmation text} or {"error": str}
+        """
+        today = date.today().isoformat()
+        intake_path = self.vault_path / ".session" / "new-role-intake.md"
+        archive_dir = self.vault_path / "goals" / "archive"
+
+        prompt = f"""Ты — ассистент Second Brain. ВЫПОЛНИ перенос роли — реально запиши файлы.
+
+СЕГОДНЯ: {today}
+VAULT: {self.vault_path}
+
+═══ ШАГ 1: ПРОЧИТАЙ ИСТОЧНИКИ ═══
+
+Прочитай накопленный контекст новой роли:
+  {intake_path}
+
+Прочитай текущее состояние:
+  {self.vault_path}/MEMORY.md
+  {self.vault_path}/goals/0-vision-3y.md
+  {self.vault_path}/goals/1-yearly-2026.md
+  {self.vault_path}/goals/2-monthly.md
+  {self.vault_path}/goals/3-weekly.md
+
+═══ ШАГ 2: АРХИВИРУЙ СТАРОЕ ═══
+
+Директория архива: {archive_dir}
+Убедись что она существует (создай если нет).
+
+2a. Скопируй (Write) текущий MEMORY.md в архив:
+    {archive_dir}/MEMORY-old-role-{today}.md
+    (содержимое = полный текущий MEMORY.md)
+
+2b. Скопируй (Write) каждый файл goals/*.md в архив с префиксом даты:
+    {archive_dir}/goals-0-vision-{today}.md
+    {archive_dir}/goals-1-yearly-{today}.md
+    {archive_dir}/goals-2-monthly-{today}.md
+    {archive_dir}/goals-3-weekly-{today}.md
+
+═══ ШАГ 3: ПЕРЕЗАПИШИ MEMORY.md ═══
+
+Write файл {self.vault_path}/MEMORY.md — ПОЛНОСТЬЮ НОВОЕ содержимое под новую роль.
+Формат — стандартный MEMORY.md Second Brain:
+  # Memory Index
+  - [Запись](file.md) — краткое описание
+
+Включи все релевантные факты из new-role-intake.md.
+Старые факты про предыдущую роль — НЕ переноси (они в архиве).
+Нейтральные факты (предпочтения, стиль работы) — сохрани.
+
+═══ ШАГ 4: ПЕРЕЗАПИШИ GOALS ═══
+
+Write каждый файл goals/*.md — НОВОЕ содержимое под новую роль:
+
+{self.vault_path}/goals/3-weekly.md — 3 цели на ближайшие 3 недели в новой роли
+{self.vault_path}/goals/2-monthly.md — 2–3 приоритета на месяц
+{self.vault_path}/goals/1-yearly-2026.md — годовые цели под новую предметную область
+{self.vault_path}/goals/0-vision-3y.md — скорректированное 3-летнее видение
+
+═══ ШАГ 5: ПОДТВЕРДИ ═══
+
+После записи всех файлов ответь ОДНОЙ строкой подтверждения:
+OK | MEMORY.md обновлён | goals обновлены | архив: {archive_dir}
+
+ВАЖНО:
+- Все пути абсолютные, используй Write/Edit инструменты
+- НЕ трогай {intake_path} (оставить как исходник)
+- Работаешь в cwd=vault, но goals/archive/ — это vault-относительный путь"""
+
+        result = self._ask(prompt, wrap=True, request_id="role-switch-apply")
+        if result.get("error"):
+            return {"error": result["error"]}
+        # Normalize confirmation to a clean message
+        reply = (result.get("report") or "").strip()
+        return {"report": reply, "processed_entries": 1}
+
     def generate_weekly(self) -> dict[str, Any]:
         """Generate weekly digest with Claude.
 

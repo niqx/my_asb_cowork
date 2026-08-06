@@ -77,3 +77,11 @@ async def btn_work_ask(message: Message, state: FSMContext) -> None:
     from d_brain.bot.handlers.work import open_work_ask_session
 
     await open_work_ask_session(message, state)
+
+
+@router.message(F.text == "🆕 Новая роль")
+async def btn_newrole(message: Message, state: FSMContext) -> None:
+    """Handle New Role button - open new role context intake session."""
+    from d_brain.bot.handlers.newrole import open_newrole_session
+
+    await open_newrole_session(message, state)

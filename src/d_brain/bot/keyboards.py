@@ -39,15 +39,16 @@ def get_main_keyboard(settings: Settings | None = None) -> ReplyKeyboardMarkup:
     for text in row2:
         builder.button(text=text)
 
-    # Row 3: work buttons (always present)
+    # Row 3: work + new role buttons (always present)
     builder.button(text="➕ Работа")
     builder.button(text="❓ Спросить")
+    builder.button(text="🆕 Новая роль")
 
-    # adjust: row1=3, row2=variable (2–4), row3=2
+    # adjust: row1=3, row2=variable (2–4), row3=3
     if len(row2) <= 3:
-        builder.adjust(3, len(row2), 2)
+        builder.adjust(3, len(row2), 3)
     else:
-        builder.adjust(3, 2, 2, 2)
+        builder.adjust(3, 2, 2, 3)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
@@ -73,6 +74,24 @@ def get_cascade_decision_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text="✅ Принять")
     builder.button(text="✏️ Внести правки")
+    builder.button(text="❌ Отмена")
+    builder.adjust(2, 1)
+    return builder.as_markup(resize_keyboard=True, is_persistent=True)
+
+
+def get_newrole_keyboard() -> ReplyKeyboardMarkup:
+    """Keyboard shown while collecting new role context chunks."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🛑 Завершить")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True, is_persistent=True)
+
+
+def get_role_switch_decision_keyboard() -> ReplyKeyboardMarkup:
+    """Keyboard shown when a role-switch preview is awaiting user decision."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="✅ Применить перенос")
+    builder.button(text="✏️ Не так — уточню")
     builder.button(text="❌ Отмена")
     builder.adjust(2, 1)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)

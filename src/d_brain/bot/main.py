@@ -26,7 +26,7 @@ def create_bot(settings: Settings) -> Bot:
 def create_dispatcher() -> Dispatcher:
     """Create and configure the dispatcher with routers."""
     from d_brain.bot.handlers import (
-        buttons, cascade, commands, do, document, done, edit, fix, food, forward, improve, location, news, photo, process, text, video, voice, weekly, work,
+        buttons, cascade, commands, do, document, done, edit, fix, food, forward, improve, location, news, newrole, photo, process, text, video, voice, weekly, work,
     )
 
     # Use memory storage for FSM (required for /do command state)
@@ -37,8 +37,9 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(location.router)
     dp.include_router(process.router)
     dp.include_router(weekly.router)
-    dp.include_router(food.router)  # Before voice/photo/text to catch food FSM state
-    dp.include_router(work.router)  # Before voice/photo/document/text to catch work FSM state
+    dp.include_router(food.router)    # Before voice/photo/text to catch food FSM state
+    dp.include_router(work.router)    # Before voice/photo/document/text to catch work FSM state
+    dp.include_router(newrole.router) # Before voice/text to catch newrole FSM states
     dp.include_router(do.router)    # Before voice/text to catch FSM state
     dp.include_router(done.router)  # /done — finalize reflection
     dp.include_router(cascade.router)  # /cascade — goal cascade review

@@ -49,3 +49,10 @@ class WorkAskState(StatesGroup):
 
     waiting_for_question = State()  # Waiting for first question
     in_session = State()            # Session open; follow-up questions continue
+
+
+class NewRoleState(StatesGroup):
+    """States for new role context intake (/newrole) and switch (/switchrole)."""
+
+    collecting = State()           # Collecting context chunks about the new role
+    confirming_switch = State()    # Waiting for user to confirm/refine role switch preview
