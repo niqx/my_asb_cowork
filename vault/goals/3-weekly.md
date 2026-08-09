@@ -1,10 +1,10 @@
 ---
 type: weekly
-period: 2026-W33
 updated: 2026-08-09
 last_accessed: 2026-08-09
 relevance: 1.0
 tier: active
+period: 2026-W33
 week: 2026-W33
 ---
 
