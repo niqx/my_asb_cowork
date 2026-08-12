@@ -2,7 +2,7 @@
 type: yearly
 updated: 2026-07-14
 last_accessed: 2026-07-14
-relevance: 0.58
+relevance: 0.56
 tier: cold
 period: 2026
 ---
