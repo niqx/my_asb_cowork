@@ -108,16 +108,17 @@ Orphans: {N} | Broken: {M} | Avg links: {X}
 
 **Logic:**
 1. Read `one_big_thing` from `.session/capture.json`
-2. Extract OBT keywords dynamically from the `one_big_thing` text:
-   - Keep all words longer than 3 characters
-   - Keep all proper nouns (words starting with a capital letter that appear after the first word of the sentence)
-   - Exclude common Russian stop words: в, по, на, до, из, со, к, с, и, а, но, или, за, от, не, что, если, это, как, при, для, над, под, без, через, между, перед, после, всеми, ключевыми, первых, новой, чтобы, всего, этого, свой, себе, него
-3. For each day (today + look back), check TWO sources for OBT movement:
-   a. **tasks/{DATE}.md** — any task (open or completed) whose content matches ≥1 OBT keyword (case-insensitive)
-   b. **daily/{DATE}.md** — any non-skip entry (type != `url`, not a bare URL line) whose text matches ≥1 OBT keyword (case-insensitive); use today's capture.json entries array for today, read the file directly for prior days
-4. A day is "OBT-covered" if movement was found in EITHER source
+2. Collect evidence for each day (today + look back) from TWO sources:
+   a. **tasks/{DATE}.md** — all task lines (open or completed)
+   b. **daily/{DATE}.md** — all non-url entries; for today use the `entries` array from capture.json (skip entries with `classification: "skip"` or `type: "url"`); for prior days read the file directly, skipping `[url]` lines
+3. **Semantic assessment** — read the collected evidence alongside the `one_big_thing` formulation and judge by meaning: does the text demonstrate actual progress on this OBT? Apply the following interpretation rules:
+   - Latin/Cyrillic spelling variants are the same entity: XSell = Х-селл = Хселл; Todoist = Тудуист; etc.
+   - Synonyms and verbal forms count: «провожу 1-1-ы» = «встречи со стейкхолдерами»; «дипдайв» = «собираю информацию по домену»; «доку» = «зафиксировать»
+   - Oblique mention does NOT count: a passing reference to a person's name unrelated to the OBT action, or scheduling a meeting without conducting it, is not evidence of OBT progress
+   - Genuine progress examples: conducting a 1-1 meeting, writing/updating a document related to OBT, completing an OBT-linked task, recording a reflection that describes OBT work done
+4. A day is "OBT-covered" if the semantic assessment finds genuine progress in EITHER source
 5. Count N = consecutive OBT-uncovered days ending today (today + look back through daily logs)
-6. If N ≥ 1 — add alert to report; if N = 0 (movement detected today in tasks OR daily) — omit the alert entirely
+6. If N ≥ 1 — add alert to report; if N = 0 — omit the alert entirely
 
 ```html
 <b>⚠️ OBT не отмечен {N}-й день подряд</b>
@@ -127,7 +128,7 @@ OBT: «{one_big_thing}»
 
 Where `suggested_day` = closest upcoming weekday with low workload (from execute.json workload map).
 
-**Важно:** если сегодняшние дневниковые записи содержат ключевые слова OBT (встречи, имена стейкхолдеров, артефакты из формулировки), но задачи с OBT-тегом нет — день всё равно считается закрытым (N=0), алерт не выводится. Движение по OBT в дневнике важнее формального тега в задаче.
+**Важно:** движение по OBT в дневнике важнее формального тега в задаче. Если записи дня семантически описывают OBT-работу — день закрыт (N=0), алерт не выводится.
 
 **Если `sick_day == true` в capture.json:** заменить блок ⚠️ overdue-алерта в разделе Process goals на:
 ```html

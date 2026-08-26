@@ -49,21 +49,18 @@ For each pattern with `suggested_tasks`, append to `tasks/{DATE}.md`:
 ### 3. OBT escalation (N≥2)
 
 1. Read `one_big_thing` from `.session/capture.json`
-2. Extract OBT keywords dynamically from the `one_big_thing` text:
-   - Keep all words longer than 3 characters
-   - Keep all proper nouns (words starting with a capital letter that appear after the first word)
-   - Exclude common Russian stop words: в, по, на, до, из, со, к, с, и, а, но, или, за, от, не, что, если, это, как, при, для, над, под, без, через, между, перед, после, всеми, ключевыми, первых, новой, чтобы, всего, этого, свой, себе, него
-3. For each of the last 2 days (today + yesterday), check TWO sources for OBT movement:
-   a. **tasks/{DATE}.md** — any task whose content matches ≥1 OBT keyword
-   b. **daily/{DATE}.md** — any non-skip entry (type != `url`, content not a bare URL) whose text matches ≥1 OBT keyword (case-insensitive)
-4. A day is "OBT-covered" if movement was found in EITHER source
+2. Collect evidence for each of the last 2 days (today + yesterday) from TWO sources:
+   a. **tasks/{DATE}.md** — all task lines (open or completed)
+   b. **daily/{DATE}.md** — all non-url entries; for today use the `entries` array from capture.json (skip entries with `classification: "skip"` or `type: "url"`); for yesterday read the file directly, skipping `[url]` lines
+3. **Semantic assessment** — judge by meaning whether the collected text demonstrates actual progress on this OBT. Apply the same interpretation rules as reflect.md: Latin/Cyrillic spelling variants are equivalent (XSell = Х-селл), synonyms and verbal forms count (провожу 1-1-ы = встречи со стейкхолдерами), but oblique mentions without evidence of actual work done do not count.
+4. A day is "OBT-covered" if genuine progress is found in EITHER source
 5. Count N = consecutive OBT-uncovered days ending today
 6. If N ≥ 2 — append to `tasks/{DATE}.md`:
 ```markdown
 - [ ] Слот для OBT: {one_big_thing} <!-- p:2 due:tomorrow obt:escalated -->
 ```
 
-Record under `obt_slot_task` in output JSON. If today is OBT-covered via daily entries (even without a task), set `obt_slot_task: null`.
+Record under `obt_slot_task` in output JSON. If today is OBT-covered (even only via daily entries), set `obt_slot_task: null`.
 
 ### 4. Save thoughts
 
