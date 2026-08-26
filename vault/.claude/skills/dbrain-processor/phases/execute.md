@@ -49,14 +49,21 @@ For each pattern with `suggested_tasks`, append to `tasks/{DATE}.md`:
 ### 3. OBT escalation (N≥2)
 
 1. Read `one_big_thing` from `.session/capture.json`
-2. Scan `tasks/{DATE}.md` and `tasks/{YESTERDAY}.md` for tasks matching OBT keywords
-3. Count N = consecutive days without OBT-linked task
-4. If N ≥ 2 — append to `tasks/{DATE}.md`:
+2. Extract OBT keywords dynamically from the `one_big_thing` text:
+   - Keep all words longer than 3 characters
+   - Keep all proper nouns (words starting with a capital letter that appear after the first word)
+   - Exclude common Russian stop words: в, по, на, до, из, со, к, с, и, а, но, или, за, от, не, что, если, это, как, при, для, над, под, без, через, между, перед, после, всеми, ключевыми, первых, новой, чтобы, всего, этого, свой, себе, него
+3. For each of the last 2 days (today + yesterday), check TWO sources for OBT movement:
+   a. **tasks/{DATE}.md** — any task whose content matches ≥1 OBT keyword
+   b. **daily/{DATE}.md** — any non-skip entry (type != `url`, content not a bare URL) whose text matches ≥1 OBT keyword (case-insensitive)
+4. A day is "OBT-covered" if movement was found in EITHER source
+5. Count N = consecutive OBT-uncovered days ending today
+6. If N ≥ 2 — append to `tasks/{DATE}.md`:
 ```markdown
 - [ ] Слот для OBT: {one_big_thing} <!-- p:2 due:tomorrow obt:escalated -->
 ```
 
-Record under `obt_slot_task` in output JSON.
+Record under `obt_slot_task` in output JSON. If today is OBT-covered via daily entries (even without a task), set `obt_slot_task: null`.
 
 ### 4. Save thoughts
 

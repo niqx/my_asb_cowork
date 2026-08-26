@@ -108,10 +108,16 @@ Orphans: {N} | Broken: {M} | Avg links: {X}
 
 **Logic:**
 1. Read `one_big_thing` from `.session/capture.json`
-2. Check if any task in `execute.json tasks_created` mentions OBT (substring match)
-3. Read yesterday's daily `daily/YYYY-MM-DD.md` (previous day) and yesterday's `execute.json` if cached, OR check if yesterday's daily log contains OBT-task reference
-4. Count consecutive days N without OBT-linked task (today + look back through daily logs)
-5. If N ≥ 1 (today has no OBT-linked task) — add alert to report:
+2. Extract OBT keywords dynamically from the `one_big_thing` text:
+   - Keep all words longer than 3 characters
+   - Keep all proper nouns (words starting with a capital letter that appear after the first word of the sentence)
+   - Exclude common Russian stop words: в, по, на, до, из, со, к, с, и, а, но, или, за, от, не, что, если, это, как, при, для, над, под, без, через, между, перед, после, всеми, ключевыми, первых, новой, чтобы, всего, этого, свой, себе, него
+3. For each day (today + look back), check TWO sources for OBT movement:
+   a. **tasks/{DATE}.md** — any task (open or completed) whose content matches ≥1 OBT keyword (case-insensitive)
+   b. **daily/{DATE}.md** — any non-skip entry (type != `url`, not a bare URL line) whose text matches ≥1 OBT keyword (case-insensitive); use today's capture.json entries array for today, read the file directly for prior days
+4. A day is "OBT-covered" if movement was found in EITHER source
+5. Count N = consecutive OBT-uncovered days ending today (today + look back through daily logs)
+6. If N ≥ 1 — add alert to report; if N = 0 (movement detected today in tasks OR daily) — omit the alert entirely
 
 ```html
 <b>⚠️ OBT не отмечен {N}-й день подряд</b>
@@ -120,6 +126,8 @@ OBT: «{one_big_thing}»
 ```
 
 Where `suggested_day` = closest upcoming weekday with low workload (from execute.json workload map).
+
+**Важно:** если сегодняшние дневниковые записи содержат ключевые слова OBT (встречи, имена стейкхолдеров, артефакты из формулировки), но задачи с OBT-тегом нет — день всё равно считается закрытым (N=0), алерт не выводится. Движение по OBT в дневнике важнее формального тега в задаче.
 
 **Если `sick_day == true` в capture.json:** заменить блок ⚠️ overdue-алерта в разделе Process goals на:
 ```html
