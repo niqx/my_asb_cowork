@@ -2,7 +2,7 @@
 type: monthly
 updated: 2026-08-23
 last_accessed: 2026-08-23
-relevance: 0.93
+relevance: 0.91
 tier: active
 period: 2026-08
 ---
