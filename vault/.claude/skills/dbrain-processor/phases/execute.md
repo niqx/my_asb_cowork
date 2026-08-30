@@ -26,6 +26,28 @@ Priorities: 1=критично, 2=высокий, 3=средний, 4=низки
 
 ## Task
 
+### 0. Weekend check
+
+Before creating any tasks, determine the day of the week from the `date` field in `.session/capture.json`:
+
+```python
+from datetime import date
+d = date.fromisoformat(capture["date"])
+is_weekend = d.weekday() >= 5  # Saturday=5, Sunday=6
+```
+
+If `is_weekend` is True:
+
+- **Skip sections 1, 2, 3** (task creation and OBT escalation) entirely — do not create work tasks, do not create the OBT slot, do not create pattern-suggested work tasks.
+- **Personal/household/family tasks** (shopping, health appointments, chores, family logistics) may still be created if clearly non-work in nature — distinguish by meaning, not by format.
+- **Do NOT** reschedule skipped work tasks to Monday or add them with a future due date — simply do not create them. The underlying entry is preserved in the daily file and can be picked up on Monday's capture.
+- **Sections 4 and 5** (save thoughts, build links) run unchanged — saving a thought or creating a wiki-link is always fine.
+- Set `"weekend_mode": true` in the output JSON and leave `tasks_created` and `pattern_tasks_created` as empty arrays, `obt_slot_task` as null.
+
+If `is_weekend` is False, proceed normally through all sections.
+
+---
+
 ### 1. Save tasks to vault
 
 For each entry with `classification: "task"`, append to `tasks/{DATE}.md`.
