@@ -37,6 +37,7 @@ from d_brain.services.tmux_parse import (
     classify_state,
     extract_reply,
     has_survey_prompt,
+    input_has_text,
     is_complete,
     is_idle,
     is_working,
@@ -401,27 +402,33 @@ class ClaudeSession:
         """Recover a prompt that a cold/long-idle pane swallowed on submit.
 
         A just-started or long-idle pane can drop the submit (the whole prompt
-        stays parked in the input box — neither working nor idle, the ❯ has
-        text), so the turn never starts and the job hangs.
+        stays parked in the input box — ❯ has text), so the turn never starts.
 
-        Critically we FIRST wait a generous grace: a real turn shows the
-        working spinner within a second, so anything still not working after
-        the grace genuinely did not submit. Touching a live turn with extra
-        keystrokes corrupts it (this broke multi-phase nightly runs), so the
-        grace is what makes nudging safe — normal turns are already working and
-        we return untouched. Only a parked prompt gets nudged: re-send Enter a
-        few times (a fresh pane accepts input only once it settles), with one
-        full re-paste midway in case the paste itself was dropped. The in-loop
-        stall→resubmit stays as the last-resort backstop.
+        Detection strategy — structural, not footer-based:
+        • ``input_has_text()`` checks whether ❯ is followed by non-whitespace.
+          A bare ❯ means the prompt was submitted (input cleared); ❯ + text
+          means it is still parked. This is more reliable than looking for
+          ``esc to interrupt`` or the spinner, both of which can be absent
+          during a cold-start loading phase lasting several minutes.
+
+        Flow:
+        1. Wait a 12 s grace: a normal turn starts processing within this time.
+        2. Return immediately if the turn is working, complete, or the input
+           field is already empty (prompt was submitted — cold-start loading is
+           in progress; do NOT interfere with it).
+        3. Only nudge if the prompt is visibly stuck in the input box (input_has_text).
         """
         self._sleep(12.0)  # grace — a real turn is working by now
-        if is_working(self._capture()) or is_complete(self._capture(), rid):
+        cap = self._capture()
+        if is_working(cap) or is_complete(cap, rid):
             return  # turn started normally — must not disturb it
+        if not input_has_text(cap):
+            return  # input empty → prompt submitted, cold-start loading — hands off
         for attempt in range(8):
             self._send_enter()
             self._sleep(2.0)
             cap = self._capture()
-            if is_working(cap) or is_complete(cap, rid):
+            if is_working(cap) or is_complete(cap, rid) or not input_has_text(cap):
                 return
             if attempt == 3:  # Enter isn't landing — re-paste the whole prompt
                 self._interrupt()
@@ -513,10 +520,12 @@ class ClaudeSession:
                     self._sleep(self._poll_interval)
                     continue
 
-                # Stall model: silence is NOT a hang signal — a quiet task
-                # still shows the working spinner. Stuck == no visible turn
-                # (and no completion) for longer than stall_timeout.
-                if is_working(cap):
+                # Stall model: fire only when the prompt is visibly stuck in
+                # the input box (input_has_text) AND has been that way for
+                # longer than stall_timeout. A bare ❯ means the prompt was
+                # submitted — the session may be in a cold-start loading phase
+                # (no spinner for minutes) and must NOT be resubmitted.
+                if is_working(cap) or not input_has_text(cap):
                     last_active = self._clock()
                 elif self._clock() - last_active > self._stall_timeout:
                     # No visible turn for stall_timeout: the prompt almost

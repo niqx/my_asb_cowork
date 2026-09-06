@@ -117,7 +117,7 @@ _LOGGED_OUT_RE = re.compile(
 _FOOTER_RE = re.compile(r"bypass permissions on")
 _IDLE_RE = re.compile(r"(?m)^\s*❯")
 _STARTING_RE = re.compile(r"Claude Code v\d", re.I)
-# Active-turn markers — two independent signals, either is sufficient:
+# Active-turn markers — three independent signals, any one is sufficient:
 #
 # 1. "esc to interrupt" in the chrome footer (standard signal).
 #
@@ -131,10 +131,24 @@ _STARTING_RE = re.compile(r"Claude Code v\d", re.I)
 #
 #    The completed-turn variant "✻ Worked for 33s" has NO ellipsis before a
 #    parenthesised counter, so it is structurally excluded by the pattern.
+#
+# 3. "paste again to expand" in the chrome footer — the TUI replaces the
+#    standard footer with this hint when a large context is being streamed in
+#    (e.g. after the model reads an 88 KB file). During this phase "esc to
+#    interrupt" is absent but the turn IS running; without this signal the
+#    stall detector would fire.
 _WORKING_RE = re.compile(r"esc to interrupt")
 _SPINNER_ACTIVE_RE = re.compile(
     r"[✻✽✢✶·*]\s+\w+(?:…|\.{3})\s*\(\d+s"
 )
+_PASTE_EXPAND_RE = re.compile(r"paste again to expand", re.I)
+# Input-field probe: ❯ followed by horizontal space + a non-space char means
+# the prompt text is sitting unsubmitted in the input box. A bare ❯ (or ❯
+# followed only by terminal padding) means the input is empty — the prompt
+# was already submitted (or the session is at an idle prompt with nothing typed).
+# NOTE: use [^\S\n] (horizontal whitespace) not \s, so that ❯\n──── (the line
+# separator that immediately follows the bare ❯) does NOT match.
+_INPUT_HAS_TEXT_RE = re.compile(r"(?m)^\s*❯[^\S\n]+\S")
 # Idle = a BARE ❯ on its own line (empty input). A menu selector ("❯ 1. Yes…")
 # has text after the chevron and must NOT count — otherwise a turn stuck on an
 # approval/menu prompt would be mistaken for completion (wrap=False).
@@ -171,18 +185,37 @@ def strip_chrome(text: str) -> str:
 def is_working(text: str) -> bool:
     """True iff the pane shows an ACTIVE turn.
 
-    Two independent signals — either is sufficient:
+    Three independent signals — any one is sufficient:
     • ``esc to interrupt`` in the chrome footer (standard signal).
-    • Spinner line ``{char} {Word}… ({N}s …)`` anywhere in the pane —
-      present even when a large-prompt paste replaces the footer with
-      ``paste again to expand``, hiding ``esc to interrupt``.
+    • Spinner line ``{char} {Word}… ({N}s …)`` anywhere in the pane.
+    • ``paste again to expand`` in the chrome footer — replaces the standard
+      footer when a large context is being streamed in; the turn IS running
+      but ``esc to interrupt`` is temporarily absent.
 
     The completed-turn line ``✻ Worked for 33s`` is structurally excluded
     because it has no ``…({N}s`` — no false positives on finished turns.
     """
+    chrome = _chrome(text)
     return bool(
-        _WORKING_RE.search(_chrome(text)) or _SPINNER_ACTIVE_RE.search(text)
+        _WORKING_RE.search(chrome)
+        or _SPINNER_ACTIVE_RE.search(text)
+        or _PASTE_EXPAND_RE.search(chrome)
     )
+
+
+def input_has_text(text: str) -> bool:
+    """True iff the prompt input field contains unsubmitted text.
+
+    A bare ``❯`` (empty input) means the prompt was already submitted —
+    either the turn is loading on a cold/long-idle session, or the session
+    is at an idle prompt with nothing typed. ``❯ some text`` means the
+    prompt is still sitting in the input box, not yet processed.
+
+    This is a more reliable submission-detection signal than checking for
+    ``esc to interrupt`` or the spinner, both of which may be absent during
+    a cold-start loading phase that can last several minutes.
+    """
+    return bool(_INPUT_HAS_TEXT_RE.search(_chrome(text)))
 
 
 _SURVEY_RE = re.compile(r"How is Claude doing this session\?")
