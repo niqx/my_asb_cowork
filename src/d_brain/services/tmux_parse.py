@@ -117,11 +117,24 @@ _LOGGED_OUT_RE = re.compile(
 _FOOTER_RE = re.compile(r"bypass permissions on")
 _IDLE_RE = re.compile(r"(?m)^\s*❯")
 _STARTING_RE = re.compile(r"Claude Code v\d", re.I)
-# Active-turn marker. The TUI shows "(esc to interrupt)" next to its spinner
-# for the whole turn, so its absence + an idle ❯ is the idle signal. The
-# bypass footer is ALWAYS on screen under --dangerously-skip-permissions and
-# must never be used as an idle signal by itself.
+# Active-turn markers — two independent signals, either is sufficient:
+#
+# 1. "esc to interrupt" in the chrome footer (standard signal).
+#
+# 2. The TUI spinner line printed ABOVE the footer:
+#      {spin_char} {Word}… ({N}s [· tokens · thinking])
+#    The spin char rotates between ✻ ✽ ✢ ✶ · * each frame; the word is an
+#    arbitrary gerund that changes every run — we only anchor on structure:
+#    spin_char + word + ellipsis + "({N}s".
+#    This line can sit ABOVE the chrome window when a tall stack is visible,
+#    so _SPINNER_ACTIVE_RE is matched against the FULL pane, not just chrome.
+#
+#    The completed-turn variant "✻ Worked for 33s" has NO ellipsis before a
+#    parenthesised counter, so it is structurally excluded by the pattern.
 _WORKING_RE = re.compile(r"esc to interrupt")
+_SPINNER_ACTIVE_RE = re.compile(
+    r"[✻✽✢✶·*]\s+\w+(?:…|\.{3})\s*\(\d+s"
+)
 # Idle = a BARE ❯ on its own line (empty input). A menu selector ("❯ 1. Yes…")
 # has text after the chevron and must NOT count — otherwise a turn stuck on an
 # approval/menu prompt would be mistaken for completion (wrap=False).
@@ -133,12 +146,14 @@ def _chrome(text: str) -> str:
 
 
 _CHROME_LINE_RE = re.compile(
-    r"^\s*❯?\s*$"               # empty / bare idle prompt
-    r"|^\s*─+\s*$"              # box rule
-    r"|bypass permissions on"   # always-present footer
-    r"|esc to interrupt"        # working spinner hint
-    r"|^\s*⏵⏵"                  # footer arrows
-    r"|^\s{2}\S.* \| .* \| "    # status line: "  name | model | path"
+    r"^\s*❯?\s*$"                                  # empty / bare idle prompt
+    r"|^\s*─+\s*$"                                 # box rule
+    r"|bypass permissions on"                      # always-present footer
+    r"|esc to interrupt"                           # working footer hint
+    r"|[✻✽✢✶·*]\s+\w+(?:…|\.{3})\s*\(\d+s"       # active spinner line
+    r"|[✻✽✢✶·*]\s+\w+(?:\s+\w+)*\s+for\s+\d+s"   # completed spinner ("✻ Worked for 33s")
+    r"|^\s*⏵⏵"                                     # footer arrows
+    r"|^\s{2}\S.* \| .* \| "                       # status line: "  name | model | path"
 )
 
 
@@ -154,13 +169,20 @@ def strip_chrome(text: str) -> str:
 
 
 def is_working(text: str) -> bool:
-    """True iff the pane shows an ACTIVE turn (the working spinner).
+    """True iff the pane shows an ACTIVE turn.
 
-    The shared liveness predicate for ask()'s stall detector and the
-    watchdog: silence is not a hang signal — a long task that prints nothing
-    still shows '(esc to interrupt)'. Hung == stuck WITHOUT this marker.
+    Two independent signals — either is sufficient:
+    • ``esc to interrupt`` in the chrome footer (standard signal).
+    • Spinner line ``{char} {Word}… ({N}s …)`` anywhere in the pane —
+      present even when a large-prompt paste replaces the footer with
+      ``paste again to expand``, hiding ``esc to interrupt``.
+
+    The completed-turn line ``✻ Worked for 33s`` is structurally excluded
+    because it has no ``…({N}s`` — no false positives on finished turns.
     """
-    return bool(_WORKING_RE.search(_chrome(text)))
+    return bool(
+        _WORKING_RE.search(_chrome(text)) or _SPINNER_ACTIVE_RE.search(text)
+    )
 
 
 _SURVEY_RE = re.compile(r"How is Claude doing this session\?")
@@ -180,14 +202,16 @@ def is_idle(text: str) -> bool:
     """True iff the session sits at an idle input prompt (no active turn).
 
     Unlike READY in classify_state (anchored on the always-present bypass
-    footer), this checks the chrome for an idle ``❯`` AND the absence of the
-    working spinner — usable as a turn-completion signal for prompts that
-    produce no marker pair.
+    footer), this checks the chrome for an idle ``❯`` AND the absence of
+    BOTH working-turn signals (footer hint + spinner line) — usable as a
+    turn-completion signal for prompts that produce no marker pair.
     """
     if not text.strip():
         return False
     chrome = _chrome(text)
     if _WORKING_RE.search(chrome):
+        return False
+    if _SPINNER_ACTIVE_RE.search(text):
         return False
     return bool(_IDLE_BARE_RE.search(chrome))
 
