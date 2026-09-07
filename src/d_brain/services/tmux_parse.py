@@ -58,30 +58,44 @@ def extract_reply(text: str, rid: str) -> str | None:
     self-references are mid-line and thus ignored). The chosen span must not
     contain another line-anchored marker of either kind, so a stray end
     marker cannot make the span swallow chrome.
+
+    Fallback: if no opening marker is found but a closing marker exists,
+    the model skipped the opening marker (e.g. a "начни с X" / "Start with X"
+    instruction in the prompt body conflicted with the marker requirement).
+    In that case, return chrome-stripped content before the last closing
+    marker so the turn is not silently lost. The caller's _clean_output()
+    handles further cleanup of any residual prompt echo.
     """
     _require_rid(rid)
     opens = list(_line_anchored(rid, "R").finditer(text))
     ends = list(_line_anchored(rid, "E").finditer(text))
-    if not opens or not ends:
+    if not ends:
         return None
 
-    # Walk end markers from last to first; pair each with the nearest
-    # preceding open marker and accept the first span with no inner marker.
-    open_starts = [m.start() for m in opens]
-    for end_m in reversed(ends):
-        end_pos = end_m.start()
-        preceding = [s for s in open_starts if s < end_pos]
-        if not preceding:
-            continue
-        start_m = next(m for m in opens if m.start() == preceding[-1])
-        inner = text[start_m.end() : end_pos]
-        # Reject if another line-anchored marker hides inside the span.
-        if _line_anchored(rid, "E").search(inner) or _line_anchored(rid, "R").search(
-            inner
-        ):
-            continue
-        return inner.strip()
-    return None
+    if opens:
+        # Normal path: both markers present — find the last clean pair.
+        open_starts = [m.start() for m in opens]
+        for end_m in reversed(ends):
+            end_pos = end_m.start()
+            preceding = [s for s in open_starts if s < end_pos]
+            if not preceding:
+                continue
+            start_m = next(m for m in opens if m.start() == preceding[-1])
+            inner = text[start_m.end() : end_pos]
+            # Reject if another line-anchored marker hides inside the span.
+            if _line_anchored(rid, "E").search(inner) or _line_anchored(
+                rid, "R"
+            ).search(inner):
+                continue
+            return inner.strip()
+        return None
+
+    # Fallback: opening marker absent — the model started its response without
+    # emitting <<<R:rid>>>. Extract chrome-stripped content before the last
+    # closing marker so the turn completes instead of timing out.
+    end_pos = ends[-1].start()
+    result = strip_chrome(text[:end_pos]).strip()
+    return result or None
 
 
 def is_complete(text: str, rid: str) -> bool:

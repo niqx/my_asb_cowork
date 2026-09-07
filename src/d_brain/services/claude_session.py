@@ -390,10 +390,16 @@ class ClaudeSession:
             self._send_text(prompt)
             self._send_enter()
             return
+        # Explicit template: show the opening marker as the first line to emit.
+        # "When done, wrap between…" was ambiguous — Claude would honour a
+        # "начни с 📋…" / "Start directly with …" instruction in the prompt body
+        # and skip the opening marker, causing is_complete() to never fire.
         payload = (
             f"{prompt}\n\n"
-            f"When done, wrap your ENTIRE reply between a line containing only "
-            f"<<<R:{rid}>>> and a line containing only <<<E:{rid}>>>."
+            f"REPLY FORMAT: Start your response with the line <<<R:{rid}>>> "
+            f"and end it with the line <<<E:{rid}>>>. "
+            f"Each marker must be alone on its own line. "
+            f"Your complete answer goes between these two markers."
         )
         self._send_text(payload)
         self._send_enter()
