@@ -1,10 +1,10 @@
 ---
 type: weekly
-period: 2026-W37
 updated: 2026-09-06
 last_accessed: 2026-09-06
-relevance: 1.0
+relevance: 0.97
 tier: active
+period: 2026-W37
 week: 2026-W37
 ---
 
