@@ -218,17 +218,13 @@ async def _generate_and_show_preview(
     label = "обновлено" if correction else ""
     header = f"<b>📋 Превью переноса роли{' (' + label + ')' if label else ''}</b>\n\n"
 
+    # edit_text only accepts InlineKeyboardMarkup; send ReplyKeyboard via separate message
     try:
-        await status_msg.edit_text(
-            header + preview_html + "\n\nКак поступить с этим переносом?",
-            reply_markup=get_role_switch_decision_keyboard(),
-        )
+        await status_msg.edit_text(header + preview_html + "\n\nКак поступить с этим переносом?")
     except Exception:
-        # Message too long or edit failed — send as new message
-        await message.answer(
-            header + preview_html + "\n\nКак поступить с этим переносом?",
-            reply_markup=get_role_switch_decision_keyboard(),
-        )
+        logger.warning("Failed to edit preview status message — sending as new message")
+        await message.answer(header + preview_html + "\n\nКак поступить с этим переносом?")
+    await message.answer("Выбери действие:", reply_markup=get_role_switch_decision_keyboard())
 
 
 async def _apply_role_switch(message: Message, state: FSMContext) -> None:
@@ -243,12 +239,19 @@ async def _apply_role_switch(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     if result.get("error"):
-        await status_msg.edit_text(f"❌ Ошибка переноса: {html.escape(result['error'])}")
+        try:
+            await status_msg.edit_text(f"❌ Ошибка переноса: {html.escape(result['error'])}")
+        except Exception:
+            logger.warning("Failed to edit status message after role switch error")
         await message.answer("Ничего не изменилось. Попробуй снова.", reply_markup=get_main_keyboard())
         return
 
-    await status_msg.edit_text(
-        "✅ Перенос выполнен. Старый контекст в архиве. "
-        "MEMORY.md и goals обновлены под новую роль.",
-        reply_markup=get_main_keyboard(),
-    )
+    # edit_text only accepts InlineKeyboardMarkup — update status text, send keyboard separately
+    try:
+        await status_msg.edit_text(
+            "✅ Перенос выполнен. Старый контекст в архиве. "
+            "MEMORY.md и goals обновлены под новую роль."
+        )
+    except Exception:
+        logger.warning("Failed to edit status message after successful role switch")
+    await message.answer("Возвращаюсь в главное меню.", reply_markup=get_main_keyboard())
