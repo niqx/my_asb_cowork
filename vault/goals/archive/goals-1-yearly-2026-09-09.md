@@ -2,8 +2,8 @@
 type: yearly
 updated: 2026-09-06
 last_accessed: 2026-09-06
-relevance: 0.9
-tier: active
+relevance: 0.88
+tier: warm
 period: 2026
 archived: 2026-09-09
 ---
