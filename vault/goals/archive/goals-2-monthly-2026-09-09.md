@@ -2,7 +2,7 @@
 type: monthly
 updated: 2026-09-06
 last_accessed: 2026-09-06
-relevance: 0.85
+relevance: 0.83
 tier: warm
 period: 2026-09
 archived: 2026-09-09
