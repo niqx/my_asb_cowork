@@ -1,0 +1,14 @@
+[Unit]
+Description=d-brain рабочие инсайты недели (вс 19:00, до рефлексии)
+After=network.target
+
+[Service]
+Type=oneshot
+User=myuser
+WorkingDirectory=/home/myuser/projects/my_asb_cowork
+ExecStart=/bin/bash /home/myuser/projects/my_asb_cowork/scripts/insights.sh
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/myuser/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=900

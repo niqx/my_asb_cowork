@@ -729,6 +729,18 @@ OK | MEMORY.md обновлён | goals обновлены | архив: {archiv
         reply = (result.get("report") or "").strip()
         return {"report": reply, "processed_entries": 1}
 
+    def _load_work_insights(self, today: date) -> str:
+        """Load this week's work insights summary if it was generated earlier."""
+        from pathlib import Path
+
+        year, week, _ = today.isocalendar()
+        week_id = f"{year}-W{week:02d}"
+        insights_path = Path.home() / ".dbrain" / "work" / "insights" / f"{week_id}.md"
+        try:
+            return insights_path.read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, OSError):
+            return ""
+
     def generate_weekly(self) -> dict[str, Any]:
         """Generate weekly digest with Claude.
 
@@ -737,7 +749,16 @@ OK | MEMORY.md обновлён | goals обновлены | архив: {archiv
         """
         today = date.today()
 
-        prompt = f"""Сегодня {today}. Сгенерируй недельный дайджест.
+        insights = self._load_work_insights(today)
+        insights_block = (
+            f"\n\n=== РАБОЧИЕ ИНСАЙТЫ НЕДЕЛИ (сгенерированы в 19:00) ===\n"
+            f"{insights}\n"
+            f"=== ИСПОЛЬЗУЙ эти паттерны и договорённости как входные данные "
+            f"для анализа недели — не пересказывай заново, а опирайся на них "
+            f"при формулировке выводов и рекомендаций. ===\n"
+        ) if insights else ""
+
+        prompt = f"""Сегодня {today}. Сгенерируй недельный дайджест.{insights_block}
 
 ПЕРВЫМ ДЕЛОМ: вызови mcp__todoist__user-info чтобы убедиться что MCP работает.
 
@@ -750,8 +771,11 @@ CRITICAL MCP RULE:
 WORKFLOW:
 1. Собери данные за неделю (daily файлы в vault/daily/, completed tasks через MCP)
 2. Проанализируй прогресс по целям (goals/3-weekly.md)
-3. Определи победы и вызовы
-4. Сгенерируй HTML отчёт
+3. Если выше есть блок РАБОЧИЕ ИНСАЙТЫ — используй их как основу для раздела
+   про рабочий контекст: выявленные паттерны → выводы, висящие договорённости →
+   риски/следующие шаги. НЕ пересказывай инсайты дословно, а синтезируй.
+4. Определи победы и вызовы
+5. Сгенерируй HTML отчёт
 
 CRITICAL OUTPUT FORMAT:
 - Return ONLY raw HTML for Telegram (parse_mode=HTML)
