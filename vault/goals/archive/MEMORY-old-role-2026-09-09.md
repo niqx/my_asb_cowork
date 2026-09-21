@@ -2,7 +2,7 @@
 type: note
 title: Agent Memory — архив на 2026-09-09 (XSell, применён 06.09)
 last_accessed: 2026-09-06
-relevance: 0.79
+relevance: 0.78
 tier: core
 ---
 
