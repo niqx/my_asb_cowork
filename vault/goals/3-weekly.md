@@ -2,8 +2,8 @@
 type: weekly
 updated: 2026-09-15
 last_accessed: 2026-09-15
-relevance: 0.9
-tier: active
+relevance: 0.88
+tier: warm
 period: 2026-W38
 week: 2026-W38
 ---
