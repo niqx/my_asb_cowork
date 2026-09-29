@@ -2,8 +2,8 @@
 type: weekly
 updated: 2026-09-06
 last_accessed: 2026-09-06
-relevance: 0.69
-tier: warm
+relevance: 0.66
+tier: cold
 period: 2026-W37
 week: 2026-W37
 archived: 2026-09-09
